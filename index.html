@@ -34,6 +34,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
 .login-header{text-align:center;margin-bottom:28px}
 .login-movement-logo{display:flex;align-items:center;justify-content:center;margin-bottom:14px;animation:float 5s ease-in-out infinite}
 .login-subtitle{font-size:13px;color:rgba(30,50,120,.55);margin-top:4px}
+.fm-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:2px;animation:fmEnter .6s cubic-bezier(.16,1,.3,1)}
+.fm-icon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,#60a5fa,#a78bfa,#38bdf8);color:#fff;font-size:20px;box-shadow:0 6px 16px rgba(124,58,237,.35);animation:fmFloat 3s ease-in-out infinite}
+.fm-text{font-size:36px;font-weight:800;letter-spacing:-.8px;background:linear-gradient(120deg,#2563eb,#7c3aed,#0ea5e9,#7c3aed,#2563eb);background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:fmShimmer 6s linear infinite}
+@keyframes fmEnter{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes fmFloat{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-4px) rotate(-4deg)}}
+@keyframes fmShimmer{to{background-position:300% center}}
+@media (prefers-reduced-motion: reduce){.fm-icon,.fm-text,.fm-brand{animation:none}}
 .login-divider{height:1px;background:rgba(30,60,180,.15);margin:20px 0}
 .login-section-title{font-size:16px;font-weight:700;color:#1e3a8a;margin-bottom:16px;display:flex;align-items:center;gap:8px}
 .mode-btns{display:flex;flex-direction:column;gap:10px}
@@ -344,7 +351,10 @@ tr:hover .cell-tools,td:hover .cell-tools{opacity:1}
           <text x="233" y="46" font-family="Arial,sans-serif" font-weight="900" font-size="44" fill="#111">›</text>
         </svg>
       </div>
-      <div style="font-size:20px;font-weight:700;background:linear-gradient(135deg,#60a5fa,#a78bfa,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px;letter-spacing:-.3px">FileManager</div>
+      <div class="fm-brand">
+        <span class="fm-icon"><i class="ti ti-folder"></i></span>
+        <span class="fm-text">FileManager</span>
+      </div>
       <div class="login-subtitle">מוקד שירות לקוחות</div>
     </div>
     <div class="login-divider"></div>
@@ -433,7 +443,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.56'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.57'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
