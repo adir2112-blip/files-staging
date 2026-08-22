@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>מוקד מובמנט — FileManager</title>
+<title>[דמה] מוקד מובמנט — FileManager</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-size='14' font-family='Arial' fill='white' font-weight='900'%3EM%3E%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -335,6 +335,12 @@ tr:hover .cell-tools,td:hover .cell-tools{opacity:1}
 </head>
 <body>
 
+<!-- ══ STAGING BANNER ══ -->
+<div id="staging-banner" style="position:fixed;top:0;left:0;right:0;z-index:99998;background:repeating-linear-gradient(135deg,#f59e0b,#f59e0b 12px,#111 12px,#111 24px);color:#111;text-align:center;font-weight:900;font-size:13px;padding:6px;letter-spacing:.03em">
+  <span style="background:#fff;padding:2px 12px;border-radius:20px;box-shadow:0 1px 4px rgba(0,0,0,.3)">🧪 סביבת דמה (Staging) — לא לשימוש עם לקוחות אמיתיים</span>
+</div>
+<style>#login-screen,#app-screen{margin-top:30px}</style>
+
 <!-- ══ LOGIN ══ -->
 <div id="login-screen">
 <canvas id="login-bg-canvas"></canvas>
@@ -443,9 +449,27 @@ const SB_URL  = 'https://vlhqkwwgmkriwojffced.supabase.co';
 const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZsaHFrd3dnbWtyaXdvamZmY2VkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI2MzY1ODEsImV4cCI6MjA5ODIxMjU4MX0.HDsgaf_S_CZjtqn2D75SpDk9KqjaC_kYtA2_Oex-vak';
 const SB_REST = SB_URL+'/rest/v1';
 
+// ── STAGING GUARD ──
+// דגל זה קיים רק בענף/אתר הדמה. חוסם בפועל שליחת מיילים/הודעות וואטסאפ אמיתיות
+// (Edge Functions של Supabase ובוט הוואטסאפ), כדי שבדיקות לא ישלחו
+// הודעות/מיילים אמיתיים ללקוחות/מנהלים אמיתיים. שאר הקריאות (Supabase REST, בדיקת גרסה)
+// עובדות רגיל.
+const IS_STAGING = true;
+if(IS_STAGING){
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = (url, opts) => {
+    const u = (url||'').toString();
+    if(u.includes('/functions/v1/') || u.includes('whatsapp-bot-production')){
+      console.log('[STAGING] נחסמה שליחה אמיתית אל:', u, opts?.body);
+      return Promise.resolve(new Response(JSON.stringify({ok:true,staging:true}),{status:200,headers:{'Content-Type':'application/json'}}));
+    }
+    return _origFetch(url, opts);
+  };
+}
+
 // ── VERSION CHECK ──
 const APP_VERSION = '1.0.59'; // עדכן מספר זה בכל שינוי
-const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
+const VERSION_URL = 'https://adir2112-blip.github.io/files-staging/version.txt';
 
 async function checkForUpdates(){
   try{
