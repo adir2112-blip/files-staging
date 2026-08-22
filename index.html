@@ -444,7 +444,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.58'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.59'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4931,14 +4931,6 @@ function initLoginBg(){
       if(n.y<-30) n.y=H+30;
       if(n.y>H+30) n.y=-30;
     });
-
-    // "movement" watermark text
-    ctx.save();
-    ctx.font='900 clamp(40px,8vw,100px) Arial Black,Arial,sans-serif';
-    ctx.fillStyle='rgba(37,99,235,0.06)';
-    ctx.textAlign='center';
-    ctx.fillText('movement»',W*.5,H*.55);
-    ctx.restore();
 
     requestAnimationFrame(draw);
   }
