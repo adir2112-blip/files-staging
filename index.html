@@ -273,7 +273,11 @@ tr:hover td.admin-col{background:var(--purple-light)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:22px;padding-top:16px;border-top:1px solid var(--border)}
 
 /* FIELD EDITOR */
-.field-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px}
+.field-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:start;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:8px;transition:border-color .12s,opacity .12s}
+.field-row.field-dragging{opacity:.4}
+.field-row.field-drag-over{border-top:3px solid var(--blue)}
+.field-drag-handle{cursor:grab;display:flex;align-items:center;justify-content:center;padding-top:20px;color:var(--text3);touch-action:none}
+.field-drag-handle:active{cursor:grabbing}
 .icon-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .icon-opt{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;border:1.5px solid var(--border);background:var(--surface2);font-size:18px;color:var(--text2);transition:all .12s}
 .icon-opt:hover,.icon-opt.selected{border-color:var(--blue);color:var(--blue);background:var(--blue-light)}
@@ -444,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.60'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.61'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4576,8 +4580,9 @@ function fieldRowHTML(ef,i,p){
   const FIELD_TYPE_LABELS={text:'טקסט',number:'מספר',select:'תפריט',checkbox:'תיבת סימון',link:'קישור (URL)',attachment:'קובץ אסמכתא (תמונה/PDF)',date:'תאריך'};
   const typeOpts=Object.keys(FIELD_TYPE_LABELS).map(t=>`<option value="${t}" ${ef.type===t?'selected':''}>${FIELD_TYPE_LABELS[t]}</option>`).join('');
   const hasNote=!!ef.noteEnabled;
-  return `<div class="field-row" style="grid-template-columns:1fr;padding:12px">
-    <div style="display:grid;grid-template-columns:1fr 1fr auto auto auto auto auto;gap:8px">
+  return `<div class="field-row" style="grid-template-columns:1fr;padding:12px" data-drag-p="${p}" data-drag-idx="${i}" ondragover="fieldDragOver(event)" ondragleave="fieldDragLeave(event)" ondrop="fieldDrop(event,'${p}',${i})">
+    <div style="display:grid;grid-template-columns:auto 1fr 1fr auto auto auto auto auto;gap:8px">
+      <div class="field-drag-handle" draggable="true" ondragstart="fieldDragStart(event,'${p}',${i})" ondragend="fieldDragEnd(event)" title="גרור לשינוי סדר"><i class="ti ti-grip-vertical" style="font-size:18px"></i></div>
       <div><label class="form-label" style="font-size:10px">שם השדה</label><input class="form-input" data-fl="${p}_${i}" value="${esc(ef.label)}" placeholder="שם"></div>
       <div><label class="form-label" style="font-size:10px">סוג</label>
         <select class="form-input" data-ft="${p}_${i}" onchange="onTypeChange('${p}',${i},this.value)"><option value="">בחר...</option>${typeOpts}</select>
@@ -4698,6 +4703,41 @@ function removeField(p,i){
   saveFieldsFromDOM(p);
   const arr=p==='f'?_tmpFields:_tmpAdminFields;
   arr.splice(i,1);
+  refreshFields(p);
+}
+// ── FIELD DRAG-AND-DROP REORDERING ──
+let _dragFieldP=null, _dragFieldIdx=null;
+function fieldDragStart(e,p,i){
+  _dragFieldP=p; _dragFieldIdx=i;
+  e.dataTransfer.effectAllowed='move';
+  e.dataTransfer.setData('text/plain',String(i));
+  const row=e.target.closest('.field-row');
+  if(row) row.classList.add('field-dragging');
+}
+function fieldDragEnd(e){
+  document.querySelectorAll('.field-row').forEach(r=>{r.classList.remove('field-dragging');r.classList.remove('field-drag-over');});
+  _dragFieldP=null; _dragFieldIdx=null;
+}
+function fieldDragOver(e){
+  if(_dragFieldP===null) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  const row=e.currentTarget;
+  if(row.dataset.dragP!==_dragFieldP) return;
+  row.classList.add('field-drag-over');
+}
+function fieldDragLeave(e){
+  e.currentTarget.classList.remove('field-drag-over');
+}
+function fieldDrop(e,p,targetIdx){
+  e.preventDefault();
+  document.querySelectorAll('.field-row').forEach(r=>r.classList.remove('field-drag-over'));
+  if(_dragFieldP!==p || _dragFieldIdx===null || _dragFieldIdx===targetIdx){ _dragFieldP=null; _dragFieldIdx=null; return; }
+  saveFieldsFromDOM(p);
+  const arr=p==='f'?_tmpFields:_tmpAdminFields;
+  const [moved]=arr.splice(_dragFieldIdx,1);
+  arr.splice(targetIdx,0,moved);
+  _dragFieldP=null; _dragFieldIdx=null;
   refreshFields(p);
 }
 function collectCoreFields(){
