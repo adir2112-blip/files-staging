@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.61'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.62'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4709,6 +4709,7 @@ function removeField(p,i){
 let _dragFieldP=null, _dragFieldIdx=null;
 function fieldDragStart(e,p,i){
   _dragFieldP=p; _dragFieldIdx=i;
+  _modalLocked=true; // מונע מהמודל להיסגר אם הגרירה יוצאת מחוץ לגבולות הריבוע ומשתחררת על הרקע
   e.dataTransfer.effectAllowed='move';
   e.dataTransfer.setData('text/plain',String(i));
   const row=e.target.closest('.field-row');
@@ -4717,6 +4718,7 @@ function fieldDragStart(e,p,i){
 function fieldDragEnd(e){
   document.querySelectorAll('.field-row').forEach(r=>{r.classList.remove('field-dragging');r.classList.remove('field-drag-over');});
   _dragFieldP=null; _dragFieldIdx=null;
+  setTimeout(()=>{_modalLocked=false;},50); // דחייה קצרה כדי לחפוף על קליק סינתטי אפשרי בסיום גרירה
 }
 function fieldDragOver(e){
   if(_dragFieldP===null) return;
