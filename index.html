@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.63'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.64'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1523,7 +1523,7 @@ function renderRecordsPage(){
       const v=(r.extra||{})[ef.id]||'';
       const canEdit=(isAdmin||ef.agentEditable)&&!_bulkMode&&ef.type!=='attachment';
       if(!canEdit){
-        if(ef.type==='select'&&v){const cls=v==='טופל'?'badge-success':v==='לא טופל'?'badge-warning':'badge-info';return `<td><span class="badge ${cls}">${esc(v)}</span></td>`;}
+        if(ef.type==='select'&&v){const cls=v==='טופל'?'badge-success':v==='לא טופל'?'badge-warning':'badge-info';return `<td><div style="display:flex;align-items:center;gap:4px;justify-content:space-between"><span class="badge ${cls}">${esc(v)}</span>${cellToolsHTML(v)}</div></td>`;}
         if(ef.type==='attachment') return `<td>${renderAttachmentCell(v)}</td>`;
         if(ef.type==='link'&&v){
           const url=v.match(/^https?:\/\//)?v:('https://'+v);
@@ -1533,7 +1533,7 @@ function renderRecordsPage(){
       }
       const editBorder='style="border-color:var(--blue)"';
       if(ef.type==='checkbox') return `<td style="text-align:center"><input type="checkbox" class="admin-checkbox" ${v==='כן'?'checked':''} onclick="event.stopPropagation()" onchange="saveExtraField('${r.id}','${ef.id}',this.checked?'כן':'לא','${S.fileId}')"></td>`;
-      if(ef.type==='select'){const opts=(ef.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${v===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td><select class="admin-input" ${editBorder} onclick="event.stopPropagation()" onchange="saveExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select></td>`;}
+      if(ef.type==='select'){const opts=(ef.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${v===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td><div style="display:flex;align-items:center;gap:4px"><select class="admin-input" ${editBorder} onclick="event.stopPropagation()" onchange="saveExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select>${cellToolsHTML(v)}</div></td>`;}
       if(ef.type==='date') return `<td><input class="admin-input" type="date" value="${esc(v)}" ${editBorder} onclick="event.stopPropagation()" onchange="saveExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')"></td>`;
       if(ef.type==='link') return `<td><input class="admin-input" type="text" value="${esc(v)}" dir="ltr" placeholder="https://..." ${editBorder} onclick="event.stopPropagation()" oninput="debounceExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')"></td>`;
       return `<td><div style="display:flex;align-items:center;gap:4px"><input class="admin-input" type="${ef.type==='number'?'number':'text'}" value="${esc(v)}" ${editBorder} onclick="event.stopPropagation()" oninput="debounceExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')">${cellToolsHTML(v)}</div></td>`;
@@ -1545,11 +1545,11 @@ function renderRecordsPage(){
         // if agentEditable — show editable input for agent
         if(af.agentEditable){
           if(af.type==='checkbox') return `<td class="admin-col" style="text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px">${agentChatBadge}<input type="checkbox" class="admin-checkbox" ${val?'checked':''} onchange="saveAdminField('${r.id}','${af.id}',this.checked,'${S.fileId}')"></div></td>`;
-          if(af.type==='select'){const opts=(af.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${val===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${agentChatBadge}<select class="admin-input" style="flex:1;border-color:#ea580c" onchange="saveAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select></div></td>`;}
+          if(af.type==='select'){const opts=(af.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${val===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${agentChatBadge}<select class="admin-input" style="flex:1;border-color:#ea580c" onchange="saveAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select>${cellToolsHTML(val)}</div></td>`;}
           return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${agentChatBadge}<input class="admin-input" type="text" value="${esc(val||'')}" placeholder="הזן..." style="flex:1;border-color:#ea580c" oninput="debounceAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')">${cellToolsHTML(val)}</div></td>`;
         }
         if(af.type==='checkbox') return `<td class="admin-col" style="text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px">${agentChatBadge}${val?'<i class="ti ti-check" style="color:var(--green)"></i>':'<i class="ti ti-x" style="color:var(--text3)"></i>'}</div></td>`;
-        if(af.type==='select'){const cls=val==='כן'||val==='מאושר'?'badge-success':val==='לא'||val==='דחוי'?'badge-warning':'badge-info';return `<td class="admin-col"><div style="display:flex;align-items:center;gap:4px">${agentChatBadge}${val?`<span class="badge ${cls}">${esc(val)}</span>`:''}</div></td>`;}
+        if(af.type==='select'){const cls=val==='כן'||val==='מאושר'?'badge-success':val==='לא'||val==='דחוי'?'badge-warning':'badge-info';return `<td class="admin-col"><div style="display:flex;align-items:center;gap:4px;justify-content:space-between"><div style="display:flex;align-items:center;gap:4px">${agentChatBadge}${val?`<span class="badge ${cls}">${esc(val)}</span>`:''}</div>${cellToolsHTML(val)}</div></td>`;}
         if(af.type==='link'&&val){const url=val.match(/^https?:\/\//)?val:('https://'+val);return `<td class="admin-col"><div style="display:flex;align-items:center;gap:4px">${agentChatBadge}<a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()"><i class="ti ti-link" style="font-size:12px"></i> פתח</a></div></td>`;}
         if(af.type==='attachment') return `<td class="admin-col"><div style="display:flex;align-items:center;gap:4px">${agentChatBadge}${renderAttachmentCell(val)}</div></td>`;
         return `<td class="admin-col"><div style="display:flex;align-items:center;gap:4px;justify-content:space-between"><div style="display:flex;align-items:center;gap:4px">${agentChatBadge}${esc(val||'')}</div>${cellToolsHTML(val)}</div></td>`;
@@ -1557,7 +1557,7 @@ function renderRecordsPage(){
       if(_bulkMode){
         // in bulk mode show read-only admin fields
         if(af.type==='checkbox') return `<td class="admin-col" style="text-align:center">${val?'<i class="ti ti-check" style="color:var(--green)"></i>':'<i class="ti ti-x" style="color:var(--text3);opacity:.4"></i>'}</td>`;
-        if(af.type==='select'){const cls=val==='כן'||val==='מאושר'?'badge-success':val==='לא'||val==='דחוי'?'badge-warning':'badge-info';return `<td class="admin-col">${val?`<span class="badge ${cls}">${esc(val)}</span>`:''}</td>`;}
+        if(af.type==='select'){const cls=val==='כן'||val==='מאושר'?'badge-success':val==='לא'||val==='דחוי'?'badge-warning':'badge-info';return `<td class="admin-col"><div style="display:flex;align-items:center;gap:4px;justify-content:space-between">${val?`<span class="badge ${cls}">${esc(val)}</span>`:'<span></span>'}${cellToolsHTML(val)}</div></td>`;}
         if(af.type==='link'&&val){const url=val.match(/^https?:\/\//)?val:('https://'+val);return `<td class="admin-col"><a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline" onclick="event.stopPropagation()"><i class="ti ti-link" style="font-size:12px"></i> פתח</a></td>`;}
         if(af.type==='attachment') return `<td class="admin-col">${renderAttachmentCell(val)}</td>`;
         return `<td class="admin-col" style="color:var(--text3)"><div style="display:flex;align-items:center;gap:4px;justify-content:space-between"><span>${esc(val||'—')}</span>${cellToolsHTML(val)}</div></td>`;
@@ -1566,7 +1566,7 @@ function renderRecordsPage(){
       const canChat = isAdmin || af.chatEnabled;
       const chatBadge=canChat?`<span onclick="event.stopPropagation();showFieldChatFromRecord(event,'${af.id}','${esc(af.label)}',_cachedRecords['${S.fileId}']?.find(x=>x.id==='${r.id}')||{id:'${r.id}',field_comments:{}})" style="cursor:pointer;color:var(--blue);margin-right:4px;flex-shrink:0" title="פתח שיחה"><i class="ti ti-message-circle" style="font-size:14px"></i>${((r.field_comments||{})[af.id]||[]).length>0?`<sup style="font-size:9px;font-weight:800">${((r.field_comments||{})[af.id]||[]).length}</sup>`:''}</span>`:'';
       if(af.type==='checkbox') return `<td class="admin-col" style="text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px">${chatBadge}<input type="checkbox" class="admin-checkbox" ${val?'checked':''} onchange="saveAdminField('${r.id}','${af.id}',this.checked,'${S.fileId}')"></div></td>`;
-      if(af.type==='select'){const opts=(af.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${val===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${chatBadge}<select class="admin-input" style="flex:1" onchange="saveAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select></div></td>`;}
+      if(af.type==='select'){const opts=(af.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${val===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${chatBadge}<select class="admin-input" style="flex:1" onchange="saveAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select>${cellToolsHTML(val)}</div></td>`;}
       if(af.type==='attachment'){
         const uploadLbl=`<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--blue);white-space:nowrap" title="${val?'החלף קובץ':'הוסף קובץ'}" onclick="event.stopPropagation()">
           <i class="ti ti-upload" style="font-size:13px"></i>${val?'':'הוסף'}
