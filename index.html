@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.65'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.66'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -2459,11 +2459,13 @@ async function loadDashDataForPeriod(){
   const {from, to} = dashPeriodRange(_dashPeriod);
   await Promise.all(DB.files.filter(f=>canManagerAccessFile(f)&&canManagerAccessOrg(f.org_id)&&f.active!==false).map(async f=>{
     try{
-      let params=`?file_id=eq.${f.id}&select=id,created_at,extra,admin_data`;
-      if(from) params+=`&created_at=gte.${encodeURIComponent(from)}`;
-      if(to)   params+=`&created_at=lt.${encodeURIComponent(to)}`;
+      // שולפים את כל הרשומות (בלי סינון תאריך) — חריגה היא מצב "עכשיו" (תלוי בגיל הרשומה),
+      // ולא בהכרח נופלת בטווח התאריכים של תקופת התצוגה. סינון לפי תקופה כאן היה מסתיר
+      // חריגות אמיתיות ברשומות שנוצרו מחוץ לתקופה (למשל "היום") למרות שהן חורגות עכשיו.
+      const params=`?file_id=eq.${f.id}&select=id,created_at,extra,admin_data`;
       const recs = await GET('records', params);
-      const total = recs.length;
+      const inPeriod = (from||to) ? recs.filter(r=>{const t=new Date(r.created_at).getTime();return (!from||t>=new Date(from).getTime())&&(!to||t<new Date(to).getTime());}) : recs;
+      const total = inPeriod.length;
       const breached = recs.filter(r=>recordMatchesAlert(r,f)).length;
       // store on data item
       if(!S._dashboardData) S._dashboardData=[];
