@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.73'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.74'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -783,13 +783,13 @@ async function loadAlertCounts(){
 }
 
 function alertForOrg(orgId){
-  return DB.files.filter(f=>f.org_id===orgId).reduce((s,f)=>s+(_alertCounts[f.id]||0),0);
+  return DB.files.filter(f=>f.org_id===orgId&&canManagerAccessFile(f)&&f.active!==false).reduce((s,f)=>s+(_alertCounts[f.id]||0),0);
 }
 function totalAlerts(){
-  return Object.values(_alertCounts).reduce((s,v)=>s+v,0);
+  return DB.files.filter(f=>canManagerAccessFile(f)&&f.active!==false).reduce((s,f)=>s+(_alertCounts[f.id]||0),0);
 }
 function fieldPendingForOrg(orgId){
-  return DB.files.filter(f=>f.org_id===orgId).reduce((s,f)=>s+(_fieldPendingCounts[f.id]||0),0);
+  return DB.files.filter(f=>f.org_id===orgId&&canManagerAccessFile(f)&&f.active!==false).reduce((s,f)=>s+(_fieldPendingCounts[f.id]||0),0);
 }
 
 function isRecordPending(record,file){
@@ -814,8 +814,8 @@ async function loadPendingCounts(){
     try{const recs=await GET('records',`?file_id=eq.${f.id}&select=id,admin_data`);_pendingCounts[f.id]=recs.filter(r=>isRecordPending(r,f)).length;}catch(e){_pendingCounts[f.id]=0;}
   }));
 }
-function pendingForOrg(id){return DB.files.filter(f=>f.org_id===id).reduce((s,f)=>s+(_pendingCounts[f.id]||0),0);}
-function totalPending(){return Object.values(_pendingCounts).reduce((s,v)=>s+v,0);}
+function pendingForOrg(id){return DB.files.filter(f=>f.org_id===id&&canManagerAccessFile(f)&&f.active!==false).reduce((s,f)=>s+(_pendingCounts[f.id]||0),0);}
+function totalPending(){return DB.files.filter(f=>canManagerAccessFile(f)&&f.active!==false).reduce((s,f)=>s+(_pendingCounts[f.id]||0),0);}
 
 // ── RENDER ──
 function render(){
@@ -903,7 +903,7 @@ function renderOrgs(){
   const totalP=totalPending();
   const alertBar=S.adminLoggedIn&&totalP>0?`<div class="admin-alert-bar">
     <div class="aab-title"><i class="ti ti-bell-ringing"></i> ממתינים לטיפול</div>
-    <div class="aab-items">${DB.files.filter(f=>(_pendingCounts[f.id]||0)>0).map(f=>{
+    <div class="aab-items">${DB.files.filter(f=>canManagerAccessFile(f)&&f.active!==false&&(_pendingCounts[f.id]||0)>0).map(f=>{
       const o=DB.orgs.find(x=>x.id===f.org_id);
       return `<div class="aab-chip" onclick="adminViewFileRecords('${f.id}')"><i class="ti ti-folder"></i>${esc(o?o.name:'')} › ${esc(f.name)}<span style="background:#fca5a5;color:#7f1d1d;border-radius:20px;padding:1px 8px;font-weight:800;font-size:11px">${_pendingCounts[f.id]}</span></div>`;
     }).join('')}</div></div>`:'';
@@ -911,7 +911,7 @@ function renderOrgs(){
   const totalAl=totalAlerts();
   const alertsBar=S.adminLoggedIn&&totalAl>0?`<div class="admin-alert-bar" style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border-color:#fed7aa">
     <div class="aab-title" style="color:#c2410c"><i class="ti ti-bell-ringing"></i> התראות פעילות</div>
-    <div class="aab-items">${DB.files.filter(f=>(_alertCounts[f.id]||0)>0).map(f=>{
+    <div class="aab-items">${DB.files.filter(f=>canManagerAccessFile(f)&&f.active!==false&&(_alertCounts[f.id]||0)>0).map(f=>{
       const o=DB.orgs.find(x=>x.id===f.org_id);
       const rule=f.alert_rule||{};
       return `<div class="aab-chip" style="border-color:#fed7aa;color:#9a3412" onclick="adminViewFileRecords('${f.id}')">
@@ -952,7 +952,7 @@ function renderOrgs(){
         ${statsBar}
         <div class="org-card-logo">${st.logo}</div>
         <div class="oc-name">${esc(o.name)}</div>
-        <div class="oc-count">${DB.files.filter(f=>f.org_id===o.id).length} קבצים</div>
+        <div class="oc-count">${DB.files.filter(f=>f.org_id===o.id&&f.active!==false&&(currentUser?.role!=='manager'||canManagerAccessFile(f))).length} קבצים</div>
       </div>
     </div>`;
   }).join('')}</div>`;
