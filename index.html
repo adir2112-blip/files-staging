@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.68'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.69'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1474,8 +1474,11 @@ function renderRecordsPage(){
       return v.toLowerCase().includes(val.toLowerCase());
     });
   });
-  if(S.chatFilter==='open'||S.chatFilter==='closed') filtered=filtered.filter(r=>recordChatStatus(r)===S.chatFilter);
-  if(S.chatFilter==='record_closed') filtered=filtered.filter(r=>!!r.closed_at);
+  if(S.chatFilter==='open'||S.chatFilter==='closed'){
+    // סטטוס טיפול: אם לקובץ יש "סגור רשומה" — זה הסטטוס הקובע; אחרת נופלים חזרה על סטטוס הצ'אט
+    if(f.allow_close_record) filtered=filtered.filter(r=>(S.chatFilter==='closed')===!!r.closed_at);
+    else filtered=filtered.filter(r=>recordChatStatus(r)===S.chatFilter);
+  }
   const sortable=(col,label,cls='')=>{
     const active=S.sortCol===col;
     const arrow=active?(S.sortDir===1?'↑':'↓'):'';
@@ -1627,13 +1630,15 @@ function renderRecordsPage(){
 
   const hasChatFields=[...extraFields,...adminFields].some(fld=>fld.chatEnabled);
   const hasCloseFeature=!!f.allow_close_record;
-  const colorFilterBorder=S.chatFilter==='open'?'#b91c1c':S.chatFilter==='record_closed'?'#15803d':S.chatFilter==='closed'?'var(--border2)':'';
-  const chatFilterHTML=(hasChatFields||hasCloseFeature)?`<select onchange="setChatFilter(this.value)" style="border-color:${colorFilterBorder}">
-    <option value="">כל הצבעים</option>
-    ${hasChatFields?`<option value="open" ${S.chatFilter==='open'?'selected':''}>🔴 אדום — פתוח, ממתין לתגובת מנהל</option>`:''}
-    ${hasChatFields?`<option value="closed" ${S.chatFilter==='closed'?'selected':''}>⚪ לבן — סגור</option>`:''}
-    ${hasCloseFeature?`<option value="record_closed" ${S.chatFilter==='record_closed'?'selected':''}>🟢 ירוק — רשומה סגורה</option>`:''}
-  </select>`:'';
+  const statusFilterBorder=S.chatFilter==='open'?'#b91c1c':S.chatFilter==='closed'?'#15803d':'';
+  const chatFilterHTML=(hasChatFields||hasCloseFeature)?`<div style="display:flex;align-items:center;gap:6px">
+    <span class="filter-label" style="font-weight:700">סטטוס טיפול:</span>
+    <select onchange="setChatFilter(this.value)" style="border-color:${statusFilterBorder};font-weight:600">
+      <option value="">הכל</option>
+      <option value="open" ${S.chatFilter==='open'?'selected':''}>פתוח</option>
+      <option value="closed" ${S.chatFilter==='closed'?'selected':''}>סגור</option>
+    </select>
+  </div>`:'';
   const filterBar=(allFilterableFields.length||hasChatFields||hasCloseFeature)?`<div class="filter-bar">
     <span class="filter-label"><i class="ti ti-filter"></i> סינון:</span>
     ${chatFilterHTML}
