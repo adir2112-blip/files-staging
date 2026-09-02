@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.72'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.73'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1025,7 +1025,7 @@ function renderForm(){
     if(ef.type==='attachment'){
       return `<div class="entry-field" style="${depDisplay}"${depAttrs}>
         <label class="entry-field-label"><i class="ti ti-paperclip"></i> ${esc(ef.label)} ${reqMark}</label>
-        <input type="file" accept="image/*,application/pdf" onchange="handleAttachmentUpload(event,'${ef.id}')" style="display:block;width:100%;padding:10px;border:1.5px dashed var(--border2);border-radius:11px;background:var(--surface2);font-size:13px;font-family:inherit">
+        <input type="file" accept="image/*,application/pdf" multiple onchange="handleAttachmentUpload(event,'${ef.id}')" style="display:block;width:100%;padding:10px;border:1.5px dashed var(--border2);border-radius:11px;background:var(--surface2);font-size:13px;font-family:inherit">
         <input type="hidden" name="extra_${ef.id}" id="attach-val-${ef.id}" ${req}>
         <div id="attach-status-${ef.id}" style="font-size:12px;color:var(--text3);margin-top:6px"></div>
         ${noteHTML}
@@ -1574,9 +1574,9 @@ function renderRecordsPage(){
       if(af.type==='checkbox') return `<td class="admin-col" style="text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px">${chatBadge}<input type="checkbox" class="admin-checkbox" ${val?'checked':''} onchange="saveAdminField('${r.id}','${af.id}',this.checked,'${S.fileId}')"></div></td>`;
       if(af.type==='select'){const opts=(af.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${val===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${chatBadge}<select class="admin-input" style="flex:1;min-width:0" title="${esc(val||'')}" onchange="saveAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select>${cellToolsHTML(val)}</div></td>`;}
       if(af.type==='attachment'){
-        const uploadLbl=`<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--blue);white-space:nowrap" title="${val?'החלף קובץ':'הוסף קובץ'}" onclick="event.stopPropagation()">
+        const uploadLbl=`<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--blue);white-space:nowrap" title="הוסף עוד תמונות/קבצים" onclick="event.stopPropagation()">
           <i class="ti ti-upload" style="font-size:13px"></i>${val?'':'הוסף'}
-          <input type="file" accept="image/*,application/pdf" style="display:none" onchange="handleAdminAttachmentUpload(event,'${r.id}','${af.id}','${S.fileId}')">
+          <input type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="handleAdminAttachmentUpload(event,'${r.id}','${af.id}','${S.fileId}')">
         </label>`;
         return `<td class="admin-col"><div style="display:flex;align-items:center;gap:6px">${chatBadge}${renderAttachmentCell(val)}${uploadLbl}</div></td>`;
       }
@@ -3844,52 +3844,88 @@ function compressImage(file,maxDim=1280,quality=0.7){
     reader.readAsDataURL(file);
   });
 }
+const MAX_ATTACHMENTS_PER_FIELD=6;
+async function uploadOneAttachment(fieldId,file){
+  let blob=file,ext=(file.name.split('.').pop()||'bin').toLowerCase();
+  if(file.type.startsWith('image/')){ blob=await compressImage(file); ext='jpg'; }
+  const path=`${fieldId}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const res=await fetch(`${SB_URL}/storage/v1/object/${ATTACHMENTS_BUCKET}/${path}`,{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':blob.type||file.type||'application/octet-stream'},
+    body:blob
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return {url:`${SB_URL}/storage/v1/object/public/${ATTACHMENTS_BUCKET}/${path}`, size:blob.size};
+}
 async function handleAttachmentUpload(event,fieldId){
-  const file=event.target.files[0]; if(!file) return;
+  let files=[...event.target.files]; if(!files.length) return;
   const statusEl=document.getElementById('attach-status-'+fieldId);
   const hiddenEl=document.getElementById('attach-val-'+fieldId);
   const submitBtn=document.getElementById('submit-btn');
-  statusEl.innerHTML='<i class="ti ti-loader-2" style="display:inline-block;animation:spin .8s linear infinite"></i> מעלה...';
+  let truncNote='';
+  if(files.length>MAX_ATTACHMENTS_PER_FIELD){ truncNote=` (הועלו רק ${MAX_ATTACHMENTS_PER_FIELD} הראשונות — מקסימום לשדה)`; files=files.slice(0,MAX_ATTACHMENTS_PER_FIELD); }
   if(submitBtn) submitBtn.disabled=true;
-  try{
-    let blob=file,ext=(file.name.split('.').pop()||'bin').toLowerCase();
-    if(file.type.startsWith('image/')){ blob=await compressImage(file); ext='jpg'; }
-    const path=`${fieldId}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
-    const res=await fetch(`${SB_URL}/storage/v1/object/${ATTACHMENTS_BUCKET}/${path}`,{
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':blob.type||file.type||'application/octet-stream'},
-      body:blob
-    });
-    if(!res.ok) throw new Error(await res.text());
-    const publicUrl=`${SB_URL}/storage/v1/object/public/${ATTACHMENTS_BUCKET}/${path}`;
-    hiddenEl.value=publicUrl;
-    statusEl.innerHTML=`<i class="ti ti-circle-check" style="color:var(--green)"></i> ${esc(file.name)} (${(blob.size/1024).toFixed(0)}KB)`;
-  }catch(e){
-    statusEl.innerHTML=`<i class="ti ti-alert-circle" style="color:var(--red)"></i> שגיאה בהעלאה — נסה שוב`;
+  const urls=[]; let totalSize=0; let failed=0;
+  for(let i=0;i<files.length;i++){
+    statusEl.innerHTML=`<i class="ti ti-loader-2" style="display:inline-block;animation:spin .8s linear infinite"></i> מעלה ${i+1} מתוך ${files.length}...`;
+    try{
+      const {url,size}=await uploadOneAttachment(fieldId,files[i]);
+      urls.push(url); totalSize+=size;
+    }catch(e){ failed++; }
+  }
+  if(urls.length){
+    hiddenEl.value=JSON.stringify(urls);
+    statusEl.innerHTML=failed
+      ? `<i class="ti ti-alert-triangle" style="color:var(--amber)"></i> ${urls.length} קבצים הועלו, ${failed} נכשלו${truncNote}`
+      : `<i class="ti ti-circle-check" style="color:var(--green)"></i> ${urls.length===1?'קובץ אחד הועלה':urls.length+' קבצים הועלו'} (${(totalSize/1024).toFixed(0)}KB)${truncNote}`;
+  }else{
     hiddenEl.value='';
+    statusEl.innerHTML=`<i class="ti ti-alert-circle" style="color:var(--red)"></i> שגיאה בהעלאה — נסה שוב`;
   }
   if(submitBtn) submitBtn.disabled=false;
 }
 async function handleAdminAttachmentUpload(event,recordId,fieldId,fileId){
-  const file=event.target.files[0]; if(!file) return;
-  try{
-    let blob=file,ext=(file.name.split('.').pop()||'bin').toLowerCase();
-    if(file.type.startsWith('image/')){ blob=await compressImage(file); ext='jpg'; }
-    const path=`${fieldId}/${Date.now()}_${Math.random().toString(36).slice(2,8)}.${ext}`;
-    const res=await fetch(`${SB_URL}/storage/v1/object/${ATTACHMENTS_BUCKET}/${path}`,{
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':blob.type||file.type||'application/octet-stream'},
-      body:blob
-    });
-    if(!res.ok) throw new Error(await res.text());
-    const publicUrl=`${SB_URL}/storage/v1/object/public/${ATTACHMENTS_BUCKET}/${path}`;
-    await saveAdminField(recordId,fieldId,publicUrl,fileId);
+  let files=[...event.target.files]; if(!files.length) return;
+  const recs=_cachedRecords[fileId]||[];
+  const record=recs.find(r=>r.id===recordId);
+  const existing=parseAttachmentUrls(record?record.admin_data?.[fieldId]:null);
+  const room=MAX_ATTACHMENTS_PER_FIELD-existing.length;
+  if(room<=0){ showAlert(`כבר יש מקסימום ${MAX_ATTACHMENTS_PER_FIELD} קבצים בשדה זה`,'error'); return; }
+  if(files.length>room) files=files.slice(0,room);
+  showAlert(`מעלה ${files.length} קבצים...`,'success');
+  const newUrls=[]; let failed=0;
+  for(const file of files){
+    try{ const {url}=await uploadOneAttachment(fieldId,file); newUrls.push(url); }
+    catch(e){ failed++; }
+  }
+  if(newUrls.length){
+    const combined=[...existing,...newUrls];
+    await saveAdminField(recordId,fieldId,JSON.stringify(combined),fileId);
     render();
-    showAlert('הקובץ הועלה בהצלחה','success');
-  }catch(e){ showAlert('שגיאה בהעלאת הקובץ','error'); }
+    showAlert(failed?`${newUrls.length} הועלו, ${failed} נכשלו`:'הקבצים הועלו בהצלחה','success');
+  }else{
+    showAlert('שגיאה בהעלאת הקבצים','error');
+  }
+}
+function parseAttachmentUrls(val){
+  if(!val) return [];
+  if(Array.isArray(val)) return val.filter(Boolean);
+  if(typeof val!=='string') return [];
+  if(val.trim().startsWith('[')){
+    try{ const arr=JSON.parse(val); return Array.isArray(arr)?arr.filter(Boolean):[]; }catch(e){ return [val]; }
+  }
+  return [val];
 }
 function renderAttachmentCell(val){
-  if(!val) return '';
+  const urls=parseAttachmentUrls(val);
+  if(!urls.length) return '';
+  if(urls.length===1) return renderOneAttachmentLink(urls[0]);
+  const urlsJson=esc(JSON.stringify(urls));
+  return `<button type="button" onclick="loadAttachmentGallery(event,this,'${urlsJson}')" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--blue);background:var(--blue-light);border:1px solid #bfdbfe;border-radius:20px;padding:3px 10px;font-family:inherit">
+    <i class="ti ti-photos" style="font-size:13px"></i> ${urls.length} תמונות — לחץ להצגה
+  </button>`;
+}
+function renderOneAttachmentLink(val){
   const isImg=/\.(jpe?g|png|gif|webp)(\?|$)/i.test(val);
   if(isImg){
     // לא טוענים את התמונה עד שלוחצים — חוסך תעבורת נתונים (egress) בכל טעינת טבלה
@@ -3907,6 +3943,21 @@ function loadAttachmentPreview(event,btn,url){
   img.onerror=()=>{ img.outerHTML='<span style="color:var(--text3);font-size:11px">📎 פג תוקף</span>'; };
   img.src=url; // הבקשה בפועל יוצאת רק כאן, אחרי הלחיצה
   btn.replaceWith(img);
+}
+function loadAttachmentGallery(event,btn,urlsJson){
+  event.stopPropagation();
+  let urls=[]; try{ urls=JSON.parse(urlsJson); }catch(e){}
+  const wrap=document.createElement('span');
+  wrap.style.cssText='display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center';
+  urls.forEach(url=>{
+    const img=document.createElement('img');
+    img.style.cssText='width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--border);vertical-align:middle;cursor:pointer';
+    img.onclick=(e)=>{ e.stopPropagation(); window.open(url,'_blank'); };
+    img.onerror=()=>{ img.outerHTML='<span style="color:var(--text3);font-size:11px">📎 פג תוקף</span>'; };
+    img.src=url; // הבקשה בפועל יוצאת רק כאן, אחרי הלחיצה על "הצג"
+    wrap.appendChild(img);
+  });
+  btn.replaceWith(wrap);
 }
 
 // ── SUBMIT ──
@@ -4868,7 +4919,8 @@ async function exportFile(fileId){
   const records=await GET('records',`?file_id=eq.${fileId}&order=created_at.desc`);
   const extra=f.extra_fields||[],admin=f.admin_fields||[];
   const headers=['תאריך','שם פרטי','שם משפחה','טלפון','ת"ז','נציג',...extra.map(ef=>ef.label),...admin.map(af=>'[ניהולי] '+af.label),...(admin.length?['תאריך טיפול']:[])];
-  const rows=records.map(r=>[fmtDate(r.created_at),r.first_name,r.last_name,r.phone,r.id_num,r.agent_name||'',...extra.map(ef=>(r.extra||{})[ef.id]||''),...admin.map(af=>{const v=(r.admin_data||{})[af.id];return af.type==='checkbox'?(v?'כן':'לא'):(v||'');}),...(admin.length?[r.treated_at?fmtDate(r.treated_at):'']:[])]);
+  const attachCell=(ef,v)=>ef.type==='attachment'?parseAttachmentUrls(v).join(' | '):(v||'');
+  const rows=records.map(r=>[fmtDate(r.created_at),r.first_name,r.last_name,r.phone,r.id_num,r.agent_name||'',...extra.map(ef=>attachCell(ef,(r.extra||{})[ef.id])),...admin.map(af=>{const v=(r.admin_data||{})[af.id];return af.type==='checkbox'?(v?'כן':'לא'):attachCell(af,v);}),...(admin.length?[r.treated_at?fmtDate(r.treated_at):'']:[])]);
   buildXLSX(f.name,headers,rows,admin.map((_,i)=>6+extra.length+i));
 }
 async function exportAll(){
