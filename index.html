@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.69'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.70'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1630,10 +1630,13 @@ function renderRecordsPage(){
 
   const hasChatFields=[...extraFields,...adminFields].some(fld=>fld.chatEnabled);
   const hasCloseFeature=!!f.allow_close_record;
-  const statusFilterBorder=S.chatFilter==='open'?'#b91c1c':S.chatFilter==='closed'?'#15803d':'';
-  const chatFilterHTML=(hasChatFields||hasCloseFeature)?`<div style="display:flex;align-items:center;gap:6px">
-    <span class="filter-label" style="font-weight:700">סטטוס טיפול:</span>
-    <select onchange="setChatFilter(this.value)" style="border-color:${statusFilterBorder};font-weight:600">
+  const statusBg=S.chatFilter==='open'?'#fecaca':S.chatFilter==='closed'?'#bbf7d0':'#fff';
+  const statusBorder=S.chatFilter==='open'?'#b91c1c':S.chatFilter==='closed'?'#15803d':'var(--blue)';
+  const statusColor=S.chatFilter==='open'?'#7f1d1d':S.chatFilter==='closed'?'#14532d':'var(--blue)';
+  const chatFilterHTML=(hasChatFields||hasCloseFeature)?`<div style="display:flex;align-items:center;gap:8px;background:${statusBg};border:2px solid ${statusBorder};border-radius:20px;padding:5px 14px 5px 8px;transition:background .15s,border-color .15s">
+    <i class="ti ti-adjustments-alt" style="color:${statusColor};font-size:16px"></i>
+    <span style="font-weight:800;color:${statusColor};font-size:13px;white-space:nowrap">סטטוס טיפול</span>
+    <select onchange="setChatFilter(this.value)" style="border:none;background:transparent;font-weight:800;color:${statusColor};cursor:pointer;padding:2px 4px">
       <option value="">הכל</option>
       <option value="open" ${S.chatFilter==='open'?'selected':''}>פתוח</option>
       <option value="closed" ${S.chatFilter==='closed'?'selected':''}>סגור</option>
