@@ -448,7 +448,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.71'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.72'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1509,7 +1509,7 @@ function renderRecordsPage(){
   </th>`:'';
   const cf=f.core_fields||{};
   const coreH=(cf.first_name!==false?sortable('first_name','שם פרטי'):'')+(cf.last_name!==false?sortable('last_name','שם משפחה'):'')+(cf.phone!==false?sortable('phone','טלפון'):'')+(cf.id_num!==false?sortable('id_num','ת"ז'):'');
-  const narrowColStyle=(t)=>t==='attachment'?'max-width:90px;white-space:normal;line-height:1.3':'';
+  const narrowColStyle=(t)=>t==='attachment'?'max-width:90px;white-space:normal;line-height:1.3':t==='select'?'min-width:220px':'';
   const extraH=extraFields.map(ef=>sortable('extra_'+ef.id,esc(ef.label),'',narrowColStyle(ef.type))).join('');
   const adminH=adminFields.map(af=>sortable('admin_'+af.id,'<i class="ti ti-shield-check" style="font-size:10px"></i> '+esc(af.label),'admin-col',narrowColStyle(af.type))).join('');
   const treatedH=(isAdmin&&adminFields.length)?sortable('treated_at','<i class="ti ti-clock-check" style="font-size:10px"></i> תאריך טיפול','admin-col'):'';
