@@ -203,6 +203,11 @@ select.entry-input{cursor:pointer;padding-left:36px}
 .entry-field-note{display:flex;align-items:flex-start;gap:8px;margin-top:8px;padding:10px 12px;background:linear-gradient(135deg,#fffbeb,#fef3c7);border:1.5px solid #fcd34d;border-right:4px solid #d97706;border-radius:8px;animation:noteAppear .2s ease}
 .entry-field-note .ti{color:#b45309;font-size:16px;flex-shrink:0;margin-top:1px}
 .entry-field-note span{font-size:12.5px;color:#78350f;font-weight:600;line-height:1.5}
+.entry-instructions{display:flex;gap:12px;align-items:flex-start;margin:0 0 20px;padding:16px 18px;background:linear-gradient(135deg,#eff6ff,#eef2ff);border:1.5px solid #bfdbfe;border-right:4px solid #2563eb;border-radius:12px}
+.entry-instructions .ti{color:#1d4ed8;font-size:20px;flex-shrink:0;margin-top:2px}
+.entry-instructions-title{font-size:13px;font-weight:800;color:#1e3a8a;margin-bottom:6px}
+.entry-instructions ul{margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:4px}
+.entry-instructions li{font-size:13px;color:#1e3a5f;line-height:1.6}
 @keyframes noteAppear{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 
 
@@ -448,7 +453,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.75'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.76'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1080,6 +1085,17 @@ function renderForm(){
     </div>
 
     <div class="entry-body">
+      ${(()=>{
+        const lines=(f.instructions_text||'').split('\n').map(l=>l.trim()).filter(Boolean);
+        if(!f.show_instructions||!lines.length) return '';
+        return `<div class="entry-instructions">
+          <i class="ti ti-clipboard-text"></i>
+          <div>
+            <div class="entry-instructions-title">הנחיות לעבודה בטופס זה</div>
+            <ul>${lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
+          </div>
+        </div>`;
+      })()}
       <div class="entry-section-title"><i class="ti ti-id-badge-2"></i> פרטי לקוח</div>
 
       <form id="entry-form" onsubmit="submitRecord(event,'${f.id}')">
@@ -4564,6 +4580,16 @@ function fileModalHTML(f,mode,id=''){
         <i class="ti ti-circle-check" style="font-size:15px"></i> אפשר "סגירת רשומה" בטבלת הרשומות (לסימון טיפול מלא)
       </label>
     </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:#1d4ed8">
+        <input type="checkbox" id="mf-show-instructions" ${f.show_instructions?'checked':''} onchange="document.getElementById('mf-instructions-wrap').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#1d4ed8;cursor:pointer">
+        <i class="ti ti-info-circle" style="font-size:15px"></i> הצג הנחיות לעובדים בראש הטופס
+      </label>
+      <div id="mf-instructions-wrap" style="margin-top:8px;display:${f.show_instructions?'':'none'}">
+        <textarea class="form-input" id="mf-instructions-text" rows="4" placeholder="לדוגמה:&#10;לוודא שם מלא ומספר טלפון תקין&#10;לצרף תמונה של המסמך&#10;לא לאשר בקשה ללא אישור מנהל">${esc(f.instructions_text||'')}</textarea>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">כל שורה תוצג כשורה נפרדת בהנחיות לעובד — אין צורך ב-HTML, העיצוב אוטומטי.</div>
+      </div>
+    </div>
     <div class="form-row"><label class="form-label">שדות טופס (נציג ממלא)</label><div id="field-list">${fieldRows}</div><button class="btn btn-sm mt-1" type="button" onclick="addField('f')"><i class="ti ti-plus"></i> הוסף שדה</button></div>
     <div class="section-divider"><i class="ti ti-shield-check"></i> שדות ניהוליים (מנהל ממלא)</div>
     <div class="form-row"><div id="admin-field-list">${adminRows}</div><button class="btn btn-sm btn-purple mt-1" type="button" onclick="addField('a')"><i class="ti ti-plus"></i> הוסף שדה ניהולי</button></div>
@@ -4901,8 +4927,8 @@ function collectWaContacts(){
   }));
 }
 
-async function saveNewFile(){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await POST('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false});await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ נוסף','success');}
-async function saveEditFile(id){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await PATCH('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false},`?id=eq.${id}`);await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ עודכן','success');}
+async function saveNewFile(){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await POST('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false,show_instructions:document.getElementById('mf-show-instructions')?.checked||false,instructions_text:document.getElementById('mf-instructions-text')?.value||''});await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ נוסף','success');}
+async function saveEditFile(id){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await PATCH('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false,show_instructions:document.getElementById('mf-show-instructions')?.checked||false,instructions_text:document.getElementById('mf-instructions-text')?.value||''},`?id=eq.${id}`);await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ עודכן','success');}
 async function confirmDeleteFile(id){if(!isAdirAdmin()){showAlert('רק אדיר יכול למחוק קבצים','error');return;}const f=DB.files.find(x=>x.id===id);if(!confirm(`למחוק את "${f.name}"?`))return;await DEL('files',`?id=eq.${id}`);await loadAll();render();showAlert('הקובץ נמחק','success');}
 async function toggleFileActive(id,newActive){
   if(!isAdirAdmin()){showAlert('רק אדיר יכול לשנות סטטוס קובץ','error');return;}
