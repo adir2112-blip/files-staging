@@ -454,7 +454,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.78'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.79'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1531,7 +1531,7 @@ function renderRecordsPage(){
   const narrowColStyle=(t)=>t==='attachment'?'max-width:90px;white-space:normal;line-height:1.3':t==='select'?'min-width:220px':'';
   const extraH=extraFields.map(ef=>sortable('extra_'+ef.id,esc(ef.label),'',narrowColStyle(ef.type))).join('');
   const adminH=adminFields.map(af=>sortable('admin_'+af.id,'<i class="ti ti-shield-check" style="font-size:10px"></i> '+esc(af.label),'admin-col',narrowColStyle(af.type))).join('');
-  const treatedH=(isAdmin&&adminFields.length)?sortable('treated_at','<i class="ti ti-clock-check" style="font-size:10px"></i> תאריך טיפול','admin-col'):'';
+  const treatedH=adminFields.length?sortable('treated_at','<i class="ti ti-clock-check" style="font-size:10px"></i> תאריך טיפול','admin-col'):'';
   const noteH=isAdmin?'<th class="admin-col" style="white-space:nowrap"><i class="ti ti-message-2" style="font-size:10px"></i> הערת מנהל</th>':'';
   const closeH=(isAdmin&&f.allow_close_record)?'<th style="white-space:nowrap"><i class="ti ti-circle-check" style="font-size:10px"></i> סטטוס טיפול</th>':'';
   const approveH='';
@@ -1607,7 +1607,7 @@ function renderRecordsPage(){
     const agentC=`<td><span class="badge badge-neutral">${esc(r.agent_name||'—')}</span></td>`;
     const lastChange=(r.change_log||[]).slice(-1)[0];
     const treatedBy=lastChange?.by||'';
-    const treatedC=(isAdmin&&adminFields.length)?`<td class="admin-col" id="treated-at-${r.id}" style="font-size:11px;color:var(--text3);white-space:nowrap">
+    const treatedC=adminFields.length?`<td class="admin-col" id="treated-at-${r.id}" style="font-size:11px;color:var(--text3);white-space:nowrap">
       ${r.treated_at?`<div>${fmtDate(r.treated_at)}</div><div style="color:var(--purple);font-weight:600;font-size:10px">${esc(treatedBy)}</div>`:'—'}
     </td>`:'';
 
