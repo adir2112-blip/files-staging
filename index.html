@@ -454,7 +454,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.79'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.80'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -2084,6 +2084,7 @@ function renderAdminFiles(){
             <div class="flex-gap">
               <button class="btn btn-sm" onclick="adminViewFileRecords('${f.id}')"><i class="ti ti-list"></i></button>
               <button class="btn btn-sm" onclick="openEditFile('${f.id}')"><i class="ti ti-edit"></i></button>
+              <button class="btn btn-sm" onclick="openDuplicateFileModal('${f.id}')" title="שכפל טופס לארגון אחר"><i class="ti ti-copy"></i></button>
               ${currentUser?.is_super_admin?`<button class="btn btn-sm" style="background:#fef3c7;border-color:#fcd34d;color:#92400e" onclick="openFilePermissions('${f.id}')" title="הרשאות גישה"><i class="ti ti-user-check"></i></button>`:''}
               ${isAdirAdmin()?`<button class="btn btn-sm" style="background:${isInactive?'var(--green-light)':'var(--surface2)'};border-color:${isInactive?'#86efac':'var(--border2)'};color:${isInactive?'#15803d':'var(--text2)'}" onclick="toggleFileActive('${f.id}',${isInactive})" title="${isInactive?'החזר לפעיל':'הפוך ללא פעיל — יוסתר ממנהלים ונציגים'}"><i class="ti ti-${isInactive?'eye':'eye-off'}"></i></button>`:''}
               ${isAdirAdmin()?`<button class="btn btn-sm btn-danger" onclick="confirmDeleteFile('${f.id}')" title="מחיקת קובץ — אדיר בלבד"><i class="ti ti-trash"></i></button>`:''}
@@ -4351,6 +4352,51 @@ function openEditOrg(id,name){showModal(`<div class="modal-title"><i class="ti t
 async function saveNewOrg(){const n=document.getElementById('org-name').value.trim();if(!n){alert('יש להזין שם');return;}await POST('organizations',{name:n});await loadAll();closeModal();render();showAlert('הארגון נוסף','success');}
 async function saveEditOrg(id){const n=document.getElementById('org-name').value.trim();if(!n){alert('יש להזין שם');return;}await PATCH('organizations',{name:n},`?id=eq.${id}`);await loadAll();closeModal();render();showAlert('הארגון עודכן','success');}
 async function confirmDeleteOrg(id){if(!confirm('למחוק ארגון זה וכל קבציו?'))return;await DEL('organizations',`?id=eq.${id}`);await loadAll();render();showAlert('הארגון נמחק','success');}
+
+// ── DUPLICATE FILE TO OTHER ORG(S) ──
+function openDuplicateFileModal(fileId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  const orgs=DB.orgs.filter(o=>o.id!==f.org_id);
+  showModal(`
+    <div class="modal-title"><i class="ti ti-copy" style="color:var(--blue)"></i> שכפול טופס "${esc(f.name)}"</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">ייווצר עותק ריק של הטופס (בלי רשומות לקוחות) תחת כל ארגון שתבחר — אפשר לבחור כמה ארגונים יחד. הרשאות גישה למנהלים לא מועתקות; הטופס החדש פתוח לכל המנהלים בארגון היעד עד שתגביל אותו.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto">
+      ${orgs.map(o=>`<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600">
+        <input type="checkbox" class="dup-org-cb" value="${o.id}" style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
+        ${esc(o.name)}
+      </label>`).join('')||'<div class="empty" style="padding:10px"><p>אין ארגונים אחרים</p></div>'}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-black" id="dup-confirm-btn" onclick="confirmDuplicateFile('${fileId}')"><i class="ti ti-copy"></i> שכפל</button>
+      <button class="btn btn-sm" onclick="closeModal()">ביטול</button>
+    </div>
+  `);
+}
+async function confirmDuplicateFile(fileId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  const targetOrgIds=[...document.querySelectorAll('.dup-org-cb:checked')].map(cb=>cb.value);
+  if(!targetOrgIds.length){ showAlert('יש לבחור לפחות ארגון אחד','error'); return; }
+  const btn=document.getElementById('dup-confirm-btn');
+  if(btn){btn.disabled=true;btn.innerHTML='<i class="ti ti-loader-2"></i> משכפל...';}
+  try{
+    for(const orgId of targetOrgIds){
+      await POST('files',{
+        name:f.name, icon:f.icon, org_id:orgId,
+        core_fields:f.core_fields||{}, extra_fields:f.extra_fields||[], admin_fields:f.admin_fields||[],
+        pending_rules:f.pending_rules||{}, alert_rule:f.alert_rule||{}, wa_contacts:f.wa_contacts||[],
+        alert_emails:f.alert_emails||[], inactivity_alert:f.inactivity_alert||{},
+        responsible_manager:f.responsible_manager||'',
+        email_schedule:f.email_schedule||{},
+        allow_close_record:f.allow_close_record||false,
+        show_instructions:f.show_instructions||false,
+        instructions_text:f.instructions_text||''
+      });
+    }
+    await loadAll(); await loadAllCounts();
+    closeModal(); render();
+    showAlert(`✓ הטופס שוכפל ל-${targetOrgIds.length} ארגונים`,'success');
+  }catch(e){ showAlert('שגיאה בשכפול: '+e.message,'error'); }
+}
 
 // ── FILE MODAL ──
 async function openNewFile(){
