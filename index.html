@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.88'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.89'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4985,7 +4985,7 @@ function fieldRowHTML(ef,i,p){
       </div>
       <div style="padding-top:20px;text-align:center">
         <label class="form-label" style="font-size:10px;margin-bottom:6px;display:block;color:var(--purple)">שדה תלוי</label>
-        <input type="checkbox" data-fdep="${p}_${i}" ${ef.dependsOn?'checked':''} onchange="toggleFieldDep('${p}',${i},this.checked)" style="width:17px;height:17px;accent-color:var(--purple);cursor:pointer" title="הצג/אפשר שדה זה רק כשתנאי בשדה אחר מתקיים">
+        <input type="checkbox" data-fdep="${p}_${i}" ${(ef.dependsOn||ef._depUiOpen)?'checked':''} onchange="toggleFieldDep('${p}',${i},this.checked)" style="width:17px;height:17px;accent-color:var(--purple);cursor:pointer" title="הצג/אפשר שדה זה רק כשתנאי בשדה אחר מתקיים">
       </div>
       <div style="padding-top:38px"><button class="btn btn-xs btn-danger" type="button" onclick="removeField('${p}',${i})"><i class="ti ti-trash"></i></button></div>
     </div>
@@ -4998,7 +4998,7 @@ function fieldRowHTML(ef,i,p){
         <textarea class="form-input" data-fn="${p}_${i}" placeholder="לדוגמה: יש לוודא שהמספר תואם לחשבונית..." style="min-height:50px;resize:vertical;font-size:13px;border-color:#fcd34d;background:#fffbeb">${esc(ef.note||'')}</textarea>
       </div>
     </div>
-    <div id="field-dep-wrap-${p}-${i}" style="display:${ef.dependsOn?'block':'none'}">
+    <div id="field-dep-wrap-${p}-${i}" style="display:${(ef.dependsOn||ef._depUiOpen)?'block':'none'}">
       ${fieldDependsOnHTML(ef,i,p)}
     </div>
   </div>`;
@@ -5010,8 +5010,11 @@ function toggleFieldNote(p,i,checked){
 function toggleFieldDep(p,i,checked){
   const wrap=document.getElementById(`field-dep-wrap-${p}-${i}`);
   if(wrap) wrap.style.display=checked?'block':'none';
+  const arr=p==='f'?_tmpFields:_tmpAdminFields;
+  // נשמר על אובייקט השדה עצמו (לא רק על ה-DOM) כדי שהפתיחה תשרוד רענון של הרשימה
+  // שקורה מפעולה אחרת (למשל מתן שם לשדה אב) — אחרת הפאנל נסגר בשקט באמצע התהליך
+  if(arr[i]) arr[i]._depUiOpen=checked;
   if(!checked){
-    const arr=p==='f'?_tmpFields:_tmpAdminFields;
     if(arr[i]){ arr[i].dependsOn=''; arr[i].dependsOnValue=''; }
     const fdo=document.querySelector(`[data-fdo="${p}_${i}"]`);
     if(fdo) fdo.value='';
