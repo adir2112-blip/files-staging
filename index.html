@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.85'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.86'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4917,7 +4917,6 @@ function fieldOptionChipsHTML(ef,i,p){
 function fieldDependsOnHTML(ef,i,p){
   const arr=p==='f'?_tmpFields:_tmpAdminFields;
   const candidates=arr.filter((of,oi)=>oi!==i&&of.label&&(of.type==='select'||of.type==='checkbox'));
-  if(!candidates.length) return '';
   const dependsOnOpts=candidates.map(of=>`<option value="${of.id}" ${ef.dependsOn===of.id?'selected':''}>${esc(of.label)}</option>`).join('');
   const parentField=candidates.find(of=>of.id===ef.dependsOn);
   let valueSelect='';
@@ -4927,6 +4926,17 @@ function fieldDependsOnHTML(ef,i,p){
       :(parentField.options||'').split(',').map(o=>o.trim()).filter(Boolean).map(o=>`<option value="${esc(o)}" ${ef.dependsOnValue===o?'selected':''}>${esc(o)}</option>`).join('');
     valueSelect=`<select class="form-input" style="font-size:12px" data-fdv="${p}_${i}"><option value="">בחר ערך מפעיל...</option>${valueOpts}</select>`;
   }
+  const dependsOnBody=candidates.length
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <select class="form-input" style="font-size:12px" data-fdo="${p}_${i}" onchange="onDependsOnChange('${p}',${i},this.value)">
+          <option value="">— תמיד מוצג —</option>
+          ${dependsOnOpts}
+        </select>
+        ${valueSelect}
+      </div>`
+    : `<div style="font-size:12px;color:var(--text3);margin-top:8px;padding:8px 10px;background:var(--surface2);border-radius:var(--radius-xs)">
+        אין עדיין שדה אחר מסוג תפריט/תיבת סימון עם שם — כדי שהשדה הזה יוכל להיות תלוי בשדה אחר, קודם צריך שדה כזה עם שם שמור ברשימה.
+      </div>`;
   const pmOnlyHTML=p==='a'?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#15803d;margin-top:10px">
       <input type="checkbox" data-fpm="${p}_${i}" ${ef.projectManagerOnly?'checked':''} onchange="document.getElementById('pm-days-wrap-${p}-${i}').style.display=this.checked?'flex':'none'" style="width:15px;height:15px;accent-color:#15803d;cursor:pointer">
       <i class="ti ti-crown" style="font-size:13px"></i> גלוי לעריכה רק למנהל פרויקט (מוסתר מנציגים ומנהלים רגילים)
@@ -4941,13 +4951,7 @@ function fieldDependsOnHTML(ef,i,p){
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--purple)">
       <i class="ti ti-git-branch" style="font-size:13px"></i> שדה תלוי — מוצג רק בתנאי
     </label>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
-      <select class="form-input" style="font-size:12px" data-fdo="${p}_${i}" onchange="onDependsOnChange('${p}',${i},this.value)">
-        <option value="">— תמיד מוצג —</option>
-        ${dependsOnOpts}
-      </select>
-      ${valueSelect}
-    </div>
+    ${dependsOnBody}
     ${pmOnlyHTML}
   </div>`;
 }
