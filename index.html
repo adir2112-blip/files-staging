@@ -266,6 +266,10 @@ td.admin-col{background:rgba(245,243,255,.3)}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:var(--surface2)}
 tr:hover td.admin-col{background:var(--purple-light)}
+th.escalation-col{background:#dcfce7;color:#15803d}
+th.escalation-col:hover{background:#bbf7d0}
+td.escalation-col{background:#f0fdf4;border-right:3px solid #15803d}
+tr:hover td.escalation-col{background:#dcfce7}
 
 /* ALERTS */
 .alert{padding:12px 16px;border-radius:var(--radius-sm);font-size:14px;margin-bottom:16px;display:flex;align-items:center;gap:8px;font-weight:500}
@@ -454,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.81'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.82'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -552,7 +556,7 @@ async function initLogin(){
     if(mgr){
       // load all agents for admin management
       allAgents=await GET('app_users','?order=name.asc&select=id,name,pin,active,last_login,allowed_orgs');
-      enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{}});
+      enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,is_project_manager:!!mgr.is_project_manager,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{}});
       PATCH('app_managers',{last_login:new Date().toISOString()},`?email=eq.${encodeURIComponent(mgr.email)}`).catch(()=>{});
       return;
     }
@@ -632,7 +636,7 @@ async function loginManager(){
   if(error){showLoginErr('mgr-err','mgr-err-msg','מייל או סיסמה שגויים');btn.disabled=false;btn.innerHTML='<i class="ti ti-login"></i> כניסה';return;}
   const {data:mgr}=await sbClient.from('app_managers').select('*').eq('email',email).eq('active',true).single();
   if(!mgr){await sbClient.auth.signOut();showLoginErr('mgr-err','mgr-err-msg','אין הרשאת מנהל');btn.disabled=false;btn.innerHTML='<i class="ti ti-login"></i> כניסה';return;}
-  enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{}});
+  enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,is_project_manager:!!mgr.is_project_manager,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{}});
   // עדכון תאריך כניסה אחרון — לא חוסם את הכניסה
   PATCH('app_managers',{last_login:new Date().toISOString()},`?email=eq.${encodeURIComponent(mgr.email)}`).catch(()=>{});
 }
@@ -676,7 +680,7 @@ async function doLogout(){
 }
 
 // ══ APP STATE ══
-function S_DEFAULT(){return{view:'orgs',orgId:null,fileId:null,adminLoggedIn:false,adminTab:'orgs',searchQ:'',alert:null,filters:{},chatFilter:'',phoneSearch:'',phoneLookup:null,sortCol:null,sortDir:1,showBulkAll:false,globalSearch:'',globalSearchResults:null,archiveMode:false};}
+function S_DEFAULT(){return{view:'orgs',orgId:null,fileId:null,adminLoggedIn:false,adminTab:'orgs',searchQ:'',alert:null,filters:{},chatFilter:'',pmFilter:'',phoneSearch:'',phoneLookup:null,sortCol:null,sortDir:1,showBulkAll:false,globalSearch:'',globalSearchResults:null,archiveMode:false};}
 let S=S_DEFAULT();
 let DB={orgs:[],files:[]};
 let _agentName='';
@@ -1014,6 +1018,33 @@ function fieldIconGuess(label){
 
 function renderForm(){
   const f=DB.files.find(x=>x.id===S.fileId); if(!f) return '';
+  if(f.locked&&!S.adminLoggedIn){
+    return `<div class="entry-card">
+      <div class="entry-hero">
+        <div class="entry-hero-top">
+          <div style="display:flex;align-items:center;gap:14px">
+            <div class="entry-hero-icon"><i class="ti ${f.icon||'ti-file'}"></i></div>
+            <div>
+              <div class="entry-hero-title">${esc(f.name)}</div>
+              <div class="entry-hero-sub">טופס הזנת פנייה חדשה</div>
+            </div>
+          </div>
+          <div class="entry-hero-actions">
+            <button class="entry-hero-btn" onclick="goRecords('${f.id}')"><i class="ti ti-list"></i> רשומות</button>
+          </div>
+        </div>
+      </div>
+      <div class="entry-body">
+        <div class="entry-instructions" style="background:linear-gradient(135deg,#b91c1c,#991b1b)">
+          <i class="ti ti-lock"></i>
+          <div>
+            <div class="entry-instructions-title">הטופס נעול כרגע</div>
+            <div style="color:#fee2e2;font-size:13.5px;font-weight:600;line-height:1.6">${esc(f.locked_message||'לא ניתן להזין רשומות חדשות בטופס זה כרגע.')}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }
   const extraF=(f.extra_fields||[]).map(ef=>{
     const isDependent=!!ef.dependsOn;
     // בשדה תלוי — לא שמים required מקורי (השדה מוסתר בהתחלה); JS יוסיף/יסיר את זה בזמן אמת
@@ -1094,6 +1125,13 @@ function renderForm(){
     </div>
 
     <div class="entry-body">
+      ${f.locked?`<div class="entry-instructions" style="background:linear-gradient(135deg,#b91c1c,#991b1b)">
+        <i class="ti ti-lock"></i>
+        <div>
+          <div class="entry-instructions-title">הטופס נעול לנציגים</div>
+          <div style="color:#fee2e2;font-size:13.5px;font-weight:600;line-height:1.6">${esc(f.locked_message||'לא הוגדרה הודעה לנציג.')} — לביטול הנעילה: עריכת טופס.</div>
+        </div>
+      </div>`:''}
       ${(()=>{
         const lines=(f.instructions_text||'').split('\n').map(l=>l.trim()).filter(Boolean);
         if(!f.show_instructions||!lines.length) return '';
@@ -1482,6 +1520,8 @@ function renderRecordsPage(){
     ? (_cachedArchive[S.fileId]||[])
     : (_cachedRecords[S.fileId]||[]);
   const extraFields=f.extra_fields||[],adminFields=f.admin_fields||[];
+  // שדות ניהוליים שמוגדרים "גלוי רק למנהל פרויקט" — מוסתרים לגמרי (כותרת+תא) מכל מי שאינו מנהל פרויקט
+  const visibleAdminFields=adminFields.filter(af=>!af.projectManagerOnly||isProjectManager());
   // count pending archive (approved but not yet 30 days)
   const pendingArchiveCount=(_cachedRecords[S.fileId]||[]).filter(r=>r.approved_at&&!r.archived).length;
   const archiveCount=(_cachedArchive[S.fileId]||[]).length;
@@ -1505,6 +1545,16 @@ function renderRecordsPage(){
     // סטטוס טיפול: אם לקובץ יש "סגור רשומה" — זה הסטטוס הקובע; אחרת נופלים חזרה על סטטוס הצ'אט
     if(f.allow_close_record) filtered=filtered.filter(r=>(S.chatFilter==='closed')===!!r.closed_at);
     else filtered=filtered.filter(r=>recordChatStatus(r)===S.chatFilter);
+  }
+  // שדות שהוגדרו כ"תת-שדה למנהל פרויקט" עם תלות — משמשים לסינון "הועבר אליי"
+  const escalationFields=adminFields.filter(af=>af.projectManagerOnly&&af.dependsOn);
+  const escalationMet=(r,af)=>{
+    const parentField=adminFields.find(x=>x.id===af.dependsOn);
+    const parentVal=(r.admin_data||{})[af.dependsOn];
+    return parentField?.type==='checkbox' ? String(!!parentVal)===af.dependsOnValue : String(parentVal||'')===(af.dependsOnValue||'');
+  };
+  if(S.pmFilter==='pending'&&isProjectManager()&&escalationFields.length){
+    filtered=filtered.filter(r=>escalationFields.some(af=>escalationMet(r,af)));
   }
   const sortable=(col,label,cls='',style='')=>{
     const active=S.sortCol===col;
@@ -1538,7 +1588,7 @@ function renderRecordsPage(){
   const coreH=(cf.first_name!==false?sortable('first_name','שם פרטי'):'')+(cf.last_name!==false?sortable('last_name','שם משפחה'):'')+(cf.phone!==false?sortable('phone','טלפון'):'')+(cf.id_num!==false?sortable('id_num','ת"ז'):'');
   const narrowColStyle=(t)=>t==='attachment'?'max-width:90px;white-space:normal;line-height:1.3':t==='select'?'min-width:220px':'';
   const extraH=extraFields.map(ef=>sortable('extra_'+ef.id,esc(ef.label),'',narrowColStyle(ef.type))).join('');
-  const adminH=adminFields.map(af=>sortable('admin_'+af.id,'<i class="ti ti-shield-check" style="font-size:10px"></i> '+esc(af.label),'admin-col',narrowColStyle(af.type))).join('');
+  const adminH=visibleAdminFields.map(af=>sortable('admin_'+af.id,(af.projectManagerOnly?'<i class="ti ti-crown" style="font-size:10px;color:#15803d"></i> ':'<i class="ti ti-shield-check" style="font-size:10px"></i> ')+esc(af.label),af.projectManagerOnly?'admin-col escalation-col':'admin-col',narrowColStyle(af.type))).join('');
   const treatedH=adminFields.length?sortable('treated_at','<i class="ti ti-clock-check" style="font-size:10px"></i> תאריך טיפול','admin-col'):'';
   const noteH=isAdmin?'<th class="admin-col" style="white-space:nowrap"><i class="ti ti-message-2" style="font-size:10px"></i> הערת מנהל</th>':'';
   const closeH=(isAdmin&&f.allow_close_record)?'<th style="white-space:nowrap"><i class="ti ti-circle-check" style="font-size:10px"></i> סטטוס טיפול</th>':'';
@@ -1571,8 +1621,12 @@ function renderRecordsPage(){
       if(ef.type==='link') return `<td><input class="admin-input" type="text" value="${esc(v)}" dir="ltr" placeholder="https://..." ${editBorder} onclick="event.stopPropagation()" oninput="debounceExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')"></td>`;
       return `<td><div style="display:flex;align-items:center;gap:4px"><input class="admin-input" type="${ef.type==='number'?'number':'text'}" value="${esc(v)}" ${editBorder} onclick="event.stopPropagation()" oninput="debounceExtraField('${r.id}','${ef.id}',this.value,'${S.fileId}')">${cellToolsHTML(v)}</div></td>`;
     }).join('');
-    const adminC=adminFields.map(af=>{
+    const adminC=visibleAdminFields.map(af=>{
       const val=(r.admin_data||{})[af.id];
+      // שדה תלוי (למשל "תת-שדה" שנחשף רק כשתשובת מנהל = ערך מסוים) — כל עוד התנאי
+      // לא מתקיים, מציגים placeholder ריק במקום התא בפועל
+      if(af.dependsOn&&!escalationMet(r,af)) return `<td class="admin-col" style="text-align:center;color:var(--text3);opacity:.5">—</td>`;
+      let cellHtml=(()=>{
       if(!isAdmin){
         const agentChatBadge=af.chatEnabled?`<span onclick="event.stopPropagation();showFieldChatFromRecord(event,'${af.id}','${esc(af.label)}',_cachedRecords['${S.fileId}']?.find(x=>x.id==='${r.id}')||{id:'${r.id}',field_comments:{}})" style="cursor:pointer;color:var(--blue);margin-right:4px;flex-shrink:0" title="פתח שיחה עם מנהל"><i class="ti ti-message-circle" style="font-size:14px"></i>${((r.field_comments||{})[af.id]||[]).length>0?`<sup style="font-size:9px;font-weight:800">${((r.field_comments||{})[af.id]||[]).length}</sup>`:''}</span>`:'';
         // if agentEditable — show editable input for agent
@@ -1611,6 +1665,9 @@ function renderRecordsPage(){
         ${val?`<a href="${(val.match(/^https?:\/\//)?val:'https://'+val).replace(/"/g,'&quot;')}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--blue);flex-shrink:0" title="פתח קישור"><i class="ti ti-external-link"></i></a>`:''}
       </div></td>`;
       return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${chatBadge}<input class="admin-input" type="text" value="${esc(val||'')}" placeholder="הזן..." style="flex:1" oninput="debounceAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')">${cellToolsHTML(val)}</div></td>`;
+      })();
+      if(af.projectManagerOnly) cellHtml=cellHtml.replace('class="admin-col"','class="admin-col escalation-col"');
+      return cellHtml;
     }).join('');
     const agentC=`<td><span class="badge badge-neutral">${esc(r.agent_name||'—')}</span></td>`;
     const lastChange=(r.change_log||[]).slice(-1)[0];
@@ -1653,7 +1710,7 @@ function renderRecordsPage(){
   // ALL fields available for filtering (extra + admin)
   const allFilterableFields = [
     ...extraFields.map(ef=>({...ef,_isAdmin:false})),
-    ...adminFields.map(af=>({...af,_isAdmin:true}))
+    ...visibleAdminFields.map(af=>({...af,_isAdmin:true}))
   ];
 
   const hasChatFields=[...extraFields,...adminFields].some(fld=>fld.chatEnabled);
@@ -1670,9 +1727,19 @@ function renderRecordsPage(){
       <option value="closed" ${S.chatFilter==='closed'?'selected':''}>סגור</option>
     </select>
   </div>`:'';
-  const filterBar=(allFilterableFields.length||hasChatFields||hasCloseFeature)?`<div class="filter-bar">
+  const showPmFilter=isProjectManager()&&escalationFields.length>0;
+  const pmFilterHTML=showPmFilter?`<div style="display:flex;align-items:center;gap:8px;background:${S.pmFilter==='pending'?'#dcfce7':'#fff'};border:2px solid #15803d;border-radius:20px;padding:5px 14px 5px 8px;transition:background .15s">
+    <i class="ti ti-crown" style="color:#15803d;font-size:16px"></i>
+    <span style="font-weight:800;color:#15803d;font-size:13px;white-space:nowrap">מנהל פרויקט</span>
+    <select onchange="setPmFilter(this.value)" style="border:none;background:transparent;font-weight:800;color:#15803d;cursor:pointer;padding:2px 4px">
+      <option value="">הכל</option>
+      <option value="pending" ${S.pmFilter==='pending'?'selected':''}>הועבר אליי</option>
+    </select>
+  </div>`:'';
+  const filterBar=(allFilterableFields.length||hasChatFields||hasCloseFeature||showPmFilter)?`<div class="filter-bar">
     <span class="filter-label"><i class="ti ti-filter"></i> סינון:</span>
     ${chatFilterHTML}
+    ${pmFilterHTML}
     ${allFilterableFields.map(field=>{
       const fid=field.id;
       const cur=esc(S.filters[fid]||'');
@@ -1685,7 +1752,7 @@ function renderRecordsPage(){
   </div>`:'';
 
   // BULK UPDATE ALL FILTERED — no selection needed
-  const bulkEligibleFields = [...extraFields,...adminFields].filter(field=>field.bulkEnabled!==false);
+  const bulkEligibleFields = [...extraFields,...visibleAdminFields].filter(field=>field.bulkEnabled!==false);
   const bulkAllBar = isAdmin && filtered.length>0 && bulkEligibleFields.length ? `
     <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px">
       <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:10px;display:flex;align-items:center;gap:6px">
@@ -1800,6 +1867,9 @@ function debounceSearch(val){
 // ADMIN
 function isAdirAdmin(){
   return currentUser?.email==='adirlev@targetcall.co.il';
+}
+function isProjectManager(){
+  return S.adminLoggedIn && (currentUser?.is_super_admin || !!currentUser?.is_project_manager);
 }
 function canSeeAdminTab(key){
   if(currentUser?.is_super_admin) return true;
@@ -2087,6 +2157,7 @@ function renderAdminFiles(){
             <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px">
               <i class="ti ${f.icon||'ti-file'}" style="color:var(--blue)"></i>${esc(f.name)}
               ${isInactive?`<span style="background:var(--surface3,#e5e7eb);color:var(--text3);border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700"><i class="ti ti-eye-off" style="font-size:10px"></i> לא פעיל</span>`:''}
+              ${f.locked?`<span style="background:#fee2e2;color:#b91c1c;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700"><i class="ti ti-lock" style="font-size:10px"></i> נעול לנציגים</span>`:''}
               ${hasRestriction?`<span title="גישה מוגבלת ל-${allowed.length} מנהלים" style="background:var(--amber-light);color:#92400e;border:1px solid #fcd34d;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700"><i class="ti ti-lock" style="font-size:10px"></i> ${allowed.length} מנהלים</span>`:'<span style="background:var(--green-light);color:#15803d;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:600"><i class="ti ti-lock-open" style="font-size:10px"></i> כולם</span>'}
             </div>
             <div class="flex-gap">
@@ -3690,7 +3761,7 @@ function renderAdminManagers(){
     </div>
     ${!managers.length
       ?`<div class="empty"><i class="ti ti-shield-off"></i><p>אין מנהלים מוגדרים</p></div>`
-      :`<div class="table-wrap"><table><thead><tr><th>מייל</th><th>שם</th><th>טלפון WA</th><th>סטטוס</th><th>קבצים</th><th>סופר מנהל</th><th>כניסה אחרונה</th><th></th></tr></thead><tbody>
+      :`<div class="table-wrap"><table><thead><tr><th>מייל</th><th>שם</th><th>טלפון WA</th><th>סטטוס</th><th>קבצים</th><th>סופר מנהל</th><th>מנהל פרויקט</th><th>כניסה אחרונה</th><th></th></tr></thead><tbody>
       ${managers.map(m=>`<tr>
         <td dir="ltr" style="font-size:13px">${esc(m.email)}</td>
         <td><div style="display:flex;align-items:center;gap:8px">
@@ -3701,6 +3772,7 @@ function renderAdminManagers(){
         <td><span class="badge ${m.active?'badge-success':'badge-warning'}">${m.active?'פעיל':'מושבת'}</span></td>
         <td style="font-size:12px">${(m.allowed_files||[]).length?`<span class="badge badge-info"><i class="ti ti-files"></i> ${(m.allowed_files||[]).length} קבצים</span>`:'<span style="color:var(--text3)">הכל</span>'}</td>
         <td>${m.is_super_admin?'<span class="badge badge-purple"><i class="ti ti-star"></i> כן</span>':'<span style="color:var(--text3)">—</span>'}</td>
+        <td>${m.is_project_manager?'<span class="badge" style="background:#dcfce7;color:#15803d"><i class="ti ti-crown"></i> כן</span>':'<span style="color:var(--text3)">—</span>'}</td>
         <td style="font-size:12px;color:var(--text2);white-space:nowrap">${m.last_login?`<i class="ti ti-clock" style="font-size:11px;color:var(--text3)"></i> ${fmtDate(m.last_login)}`:'<span style="color:var(--text3);font-style:italic">טרם התחבר</span>'}</td>
         <td><div class="flex-gap">
           <button class="btn btn-xs" onclick="openEditManagerById('${esc(m.email)}')"><i class="ti ti-edit"></i></button>
@@ -3747,6 +3819,12 @@ function openNewManager(){
     <div class="form-row"><label class="form-label">טלפון וואטסאפ (972XXXXXXXXX)</label><input class="form-input" id="mgr-new-phone" type="text" dir="ltr" placeholder="972501234567"></div>
     <div class="form-row"><label class="form-label">סוג</label><select class="form-input" id="mgr-new-super"><option value="false">מנהל רגיל</option><option value="true">סופר מנהל</option></select></div>
     <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:#15803d">
+        <input type="checkbox" id="mgr-new-pm" style="width:16px;height:16px;accent-color:#15803d;cursor:pointer">
+        <i class="ti ti-crown" style="font-size:15px"></i> מנהל פרויקט — רואה ומטפל בשדות שהועברו אליו
+      </label>
+    </div>
+    <div class="form-row">
       <label class="form-label">טאבים גלויים במסך אדמין <span style="color:var(--text3);font-weight:400">(ברירת מחדל: הכל מוצג)</span></label>
       <div id="mgr-new-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${mgrTabChecklistHTML({})}</div>
     </div>
@@ -3760,16 +3838,22 @@ function openNewManager(){
 function openEditManagerById(email){
   const m=(S._managers||[]).find(x=>x.email===email);
   if(!m) return;
-  openEditManager(m.email,m.name||'',m.phone||'',m.active,!!m.is_super_admin,m.allowed_files||[],m.tab_permissions||{});
+  openEditManager(m.email,m.name||'',m.phone||'',m.active,!!m.is_super_admin,m.allowed_files||[],m.tab_permissions||{},!!m.is_project_manager);
 }
 
-function openEditManager(email,name,phone,active,isSuper,allowedFiles=[],tabPerms={}){
+function openEditManager(email,name,phone,active,isSuper,allowedFiles=[],tabPerms={},isPM=false){
   showModal(`<div class="modal-title"><i class="ti ti-edit" style="color:var(--purple)"></i> עריכת מנהל</div>
     <div style="font-size:13px;color:var(--text2);margin-bottom:16px;padding:10px 14px;background:var(--surface2);border-radius:var(--radius-sm)" dir="ltr">${esc(email)}</div>
     <div class="form-row"><label class="form-label">שם *</label><input class="form-input" id="mgr-edit-name" value="${esc(name)}"></div>
     <div class="form-row"><label class="form-label">טלפון וואטסאפ (972XXXXXXXXX)</label><input class="form-input" id="mgr-edit-phone" type="text" dir="ltr" placeholder="972501234567" value="${esc(phone||'')}"></div>
     <div class="form-row"><label class="form-label">סטטוס</label><select class="form-input" id="mgr-edit-active"><option value="true" ${active?'selected':''}>פעיל</option><option value="false" ${!active?'selected':''}>מושבת</option></select></div>
     <div class="form-row"><label class="form-label">סוג</label><select class="form-input" id="mgr-edit-super"><option value="false" ${!isSuper?'selected':''}>מנהל רגיל</option><option value="true" ${isSuper?'selected':''}>סופר מנהל</option></select></div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:#15803d">
+        <input type="checkbox" id="mgr-edit-pm" ${isPM?'checked':''} style="width:16px;height:16px;accent-color:#15803d;cursor:pointer">
+        <i class="ti ti-crown" style="font-size:15px"></i> מנהל פרויקט — רואה ומטפל בשדות שהועברו אליו
+      </label>
+    </div>
     <div class="form-row">
       <label class="form-label">טאבים גלויים במסך אדמין <span style="color:var(--text3);font-weight:400">(לא רלוונטי לסופר מנהל — רואה הכל)</span></label>
       <div id="mgr-edit-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">${mgrTabChecklistHTML(tabPerms)}</div>
@@ -3792,11 +3876,12 @@ async function saveNewManager(){
   const name=document.getElementById('mgr-new-name').value.trim();
   const phone=document.getElementById('mgr-new-phone').value.trim();
   const isSuper=document.getElementById('mgr-new-super').value==='true';
+  const isPM=document.getElementById('mgr-new-pm')?.checked||false;
   const allowedFiles=[...document.querySelectorAll('#mgr-new-files input[type=checkbox]:checked')].map(el=>el.dataset.file);
   const tabPerms=collectMgrTabPerms('mgr-new-tabs');
   if(!email||!name){showAlert('יש למלא מייל ושם','error');return;}
   try{
-    await POST('app_managers',{email,name,phone,active:true,is_super_admin:isSuper,allowed_files:allowedFiles,tab_permissions:tabPerms});
+    await POST('app_managers',{email,name,phone,active:true,is_super_admin:isSuper,is_project_manager:isPM,allowed_files:allowedFiles,tab_permissions:tabPerms});
     await loadManagersTab(); closeModal(); showAlert('המנהל נוסף בהצלחה','success');
   }catch(e){
     showAlert(e.message.includes('duplicate')||e.message.includes('unique')?'מייל זה כבר קיים':'שגיאה: '+e.message,'error');
@@ -3808,11 +3893,12 @@ async function saveEditManager(email){
   const phone=document.getElementById('mgr-edit-phone').value.trim();
   const active=document.getElementById('mgr-edit-active').value==='true';
   const isSuper=document.getElementById('mgr-edit-super').value==='true';
+  const isPM=document.getElementById('mgr-edit-pm')?.checked||false;
   const allowedFiles=[...document.querySelectorAll('#mgr-edit-files input[type=checkbox]:checked')].map(el=>el.dataset.file);
   const tabPerms=collectMgrTabPerms('mgr-edit-tabs');
   if(!name){showAlert('יש להזין שם','error');return;}
   try{
-    await PATCH('app_managers',{name,phone,active,is_super_admin:isSuper,allowed_files:allowedFiles,tab_permissions:tabPerms},`?email=eq.${encodeURIComponent(email)}`);
+    await PATCH('app_managers',{name,phone,active,is_super_admin:isSuper,is_project_manager:isPM,allowed_files:allowedFiles,tab_permissions:tabPerms},`?email=eq.${encodeURIComponent(email)}`);
     await loadManagersTab(); closeModal(); showAlert('המנהל עודכן','success');
   }catch(e){ showAlert('שגיאה: '+e.message,'error'); }
 }
@@ -3829,6 +3915,7 @@ async function confirmDeleteManager(email){
 function gotoAdmin(){S.view='admin';render();}
 function toggleSort(col){if(S.sortCol===col){S.sortDir*=-1;}else{S.sortCol=col;S.sortDir=1;}render();}
 function setChatFilter(val){ S.chatFilter=val||''; render(); }
+function setPmFilter(val){ S.pmFilter=val||''; render(); }
 function setFilter(afId,val){
   if(val===''){ delete S.filters[afId]; }
   else { S.filters[afId]=val; }
@@ -4645,6 +4732,16 @@ function fileModalHTML(f,mode,id=''){
         <div style="font-size:11px;color:var(--text3);margin-top:4px">כל שורה תוצג כשורה נפרדת בהנחיות לעובד — אין צורך ב-HTML, העיצוב אוטומטי.</div>
       </div>
     </div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:600;color:#b91c1c">
+        <input type="checkbox" id="mf-locked" ${f.locked?'checked':''} onchange="document.getElementById('mf-locked-wrap').style.display=this.checked?'':'none'" style="width:16px;height:16px;accent-color:#b91c1c;cursor:pointer">
+        <i class="ti ti-lock" style="font-size:15px"></i> נעל טופס — נציגים לא יוכלו למלא רשומה חדשה
+      </label>
+      <div id="mf-locked-wrap" style="margin-top:8px;display:${f.locked?'':'none'}">
+        <textarea class="form-input" id="mf-locked-message" rows="3" placeholder="ההודעה שהנציג יראה במקום הטופס, לדוגמה: הטופס סגור זמנית, פנו למנהל המשמרת">${esc(f.locked_message||'')}</textarea>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">מנהלים ימשיכו לראות ולנהל את הטופס כרגיל, עם התראה שהוא נעול לנציגים.</div>
+      </div>
+    </div>
     <div class="form-row"><label class="form-label">שדות טופס (נציג ממלא)</label><div id="field-list">${fieldRows}</div><button class="btn btn-sm mt-1" type="button" onclick="addField('f')"><i class="ti ti-plus"></i> הוסף שדה</button></div>
     <div class="section-divider"><i class="ti ti-shield-check"></i> שדות ניהוליים (מנהל ממלא)</div>
     <div class="form-row"><div id="admin-field-list">${adminRows}</div><button class="btn btn-sm btn-purple mt-1" type="button" onclick="addField('a')"><i class="ti ti-plus"></i> הוסף שדה ניהולי</button></div>
@@ -4746,6 +4843,10 @@ function fieldDependsOnHTML(ef,i,p){
       :(parentField.options||'').split(',').map(o=>o.trim()).filter(Boolean).map(o=>`<option value="${esc(o)}" ${ef.dependsOnValue===o?'selected':''}>${esc(o)}</option>`).join('');
     valueSelect=`<select class="form-input" style="font-size:12px" data-fdv="${p}_${i}"><option value="">בחר ערך מפעיל...</option>${valueOpts}</select>`;
   }
+  const pmOnlyHTML=p==='a'?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#15803d;margin-top:10px">
+      <input type="checkbox" data-fpm="${p}_${i}" ${ef.projectManagerOnly?'checked':''} style="width:15px;height:15px;accent-color:#15803d;cursor:pointer">
+      <i class="ti ti-crown" style="font-size:13px"></i> גלוי לעריכה רק למנהל פרויקט (מוסתר מנציגים ומנהלים רגילים)
+    </label>`:'';
   return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border2)">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--purple)">
       <i class="ti ti-git-branch" style="font-size:13px"></i> שדה תלוי — מוצג רק בתנאי
@@ -4757,6 +4858,7 @@ function fieldDependsOnHTML(ef,i,p){
       </select>
       ${valueSelect}
     </div>
+    ${pmOnlyHTML}
   </div>`;
 }
 function fieldRowHTML(ef,i,p){
@@ -4831,6 +4933,8 @@ function saveFieldsFromDOM(p){
     if(fdo) ef.dependsOn=fdo.value;
     const fdv=document.querySelector('[data-fdv="'+p+'_'+i+'"]');
     if(fdv) ef.dependsOnValue=fdv.value;
+    const fpm=document.querySelector('[data-fpm="'+p+'_'+i+'"]');
+    if(fpm) ef.projectManagerOnly=fpm.checked;
   });
 }
 function onTypeChange(p,i,val){
@@ -4935,7 +5039,8 @@ function collectFields(p){const arr=p==='f'?_tmpFields:_tmpAdminFields;return ar
 const a2=document.querySelector(`[data-fa="${p}_${i}"]`);
 const fdo=document.querySelector(`[data-fdo="${p}_${i}"]`);
 const fdv=document.querySelector(`[data-fdv="${p}_${i}"]`);
-return{id:ef.id,label:l?l.value.trim():ef.label,type:t?t.value:ef.type,options:o?o.value.trim():ef.options,required:r?r.checked:!!ef.required,bulkEnabled:b?b.checked:(ef.bulkEnabled!==false),noteEnabled:ne?ne.checked:!!ef.noteEnabled,note:n?n.value.trim():(ef.note||''),chatEnabled:c2?c2.checked:!!ef.chatEnabled,agentEditable:a2?a2.checked:!!ef.agentEditable,dependsOn:fdo?fdo.value:(ef.dependsOn||''),dependsOnValue:fdv?fdv.value:(ef.dependsOnValue||'')};}).filter(ef=>ef.label);}
+const fpm=document.querySelector(`[data-fpm="${p}_${i}"]`);
+return{id:ef.id,label:l?l.value.trim():ef.label,type:t?t.value:ef.type,options:o?o.value.trim():ef.options,required:r?r.checked:!!ef.required,bulkEnabled:b?b.checked:(ef.bulkEnabled!==false),noteEnabled:ne?ne.checked:!!ef.noteEnabled,note:n?n.value.trim():(ef.note||''),chatEnabled:c2?c2.checked:!!ef.chatEnabled,agentEditable:a2?a2.checked:!!ef.agentEditable,dependsOn:fdo?fdo.value:(ef.dependsOn||''),dependsOnValue:fdv?fdv.value:(ef.dependsOnValue||''),projectManagerOnly:fpm?fpm.checked:!!ef.projectManagerOnly};}).filter(ef=>ef.label);}
 function collectPendingRules(){const r={};document.querySelectorAll('[data-pr]').forEach(el=>{if(el.value&&el.value!=='ignore')r[el.dataset.pr]=el.value;});return r;}
 function collectAlertEmails(){
   return [0,1,2,3].map(i=>document.getElementById(`email-alert-${i}`)?.value.trim()||'').filter(Boolean);
@@ -4982,8 +5087,8 @@ function collectWaContacts(){
   }));
 }
 
-async function saveNewFile(){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await POST('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false,show_instructions:document.getElementById('mf-show-instructions')?.checked||false,instructions_text:document.getElementById('mf-instructions-text')?.value||''});await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ נוסף','success');}
-async function saveEditFile(id){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await PATCH('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false,show_instructions:document.getElementById('mf-show-instructions')?.checked||false,instructions_text:document.getElementById('mf-instructions-text')?.value||''},`?id=eq.${id}`);await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ עודכן','success');}
+async function saveNewFile(){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await POST('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false,show_instructions:document.getElementById('mf-show-instructions')?.checked||false,instructions_text:document.getElementById('mf-instructions-text')?.value||'',locked:document.getElementById('mf-locked')?.checked||false,locked_message:document.getElementById('mf-locked-message')?.value||''});await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ נוסף','success');}
+async function saveEditFile(id){const name=document.getElementById('mf-name').value.trim(),orgId=document.getElementById('mf-org').value;if(!name){alert('יש להזין שם');return;}if(!orgId){alert('יש לבחור ארגון');return;}await PATCH('files',{name,icon:_tmpIcon,org_id:orgId,core_fields:collectCoreFields(),extra_fields:collectFields('f'),admin_fields:collectFields('a'),pending_rules:collectPendingRules(),alert_rule:collectAlertRule(),wa_contacts:collectWaContacts(),alert_emails:collectAlertEmails(),inactivity_alert:collectInactivityAlert(),responsible_manager:document.getElementById('mf-responsible')?.value||'',email_schedule:{intervalHours:parseInt(document.getElementById('email-interval')?.value||0),startHour:parseInt(document.getElementById('email-start-hour')?.value||8)},allow_close_record:document.getElementById('mf-allow-close')?.checked||false,show_instructions:document.getElementById('mf-show-instructions')?.checked||false,instructions_text:document.getElementById('mf-instructions-text')?.value||'',locked:document.getElementById('mf-locked')?.checked||false,locked_message:document.getElementById('mf-locked-message')?.value||''},`?id=eq.${id}`);await loadAll();await loadAllCounts();closeModal();render();showAlert('הקובץ עודכן','success');}
 async function confirmDeleteFile(id){if(!isAdirAdmin()){showAlert('רק אדיר יכול למחוק קבצים','error');return;}const f=DB.files.find(x=>x.id===id);if(!confirm(`למחוק את "${f.name}"?`))return;await DEL('files',`?id=eq.${id}`);await loadAll();render();showAlert('הקובץ נמחק','success');}
 async function toggleFileActive(id,newActive){
   if(!isAdirAdmin()){showAlert('רק אדיר יכול לשנות סטטוס קובץ','error');return;}
