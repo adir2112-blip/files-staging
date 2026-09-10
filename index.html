@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.82'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.83'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1607,7 +1607,14 @@ function renderRecordsPage(){
       const canEdit=(isAdmin||ef.agentEditable)&&!_bulkMode&&ef.type!=='attachment';
       if(!canEdit){
         if(ef.type==='select'&&v){const cls=v==='טופל'?'badge-success':v==='לא טופל'?'badge-warning':'badge-info';return `<td><div style="display:flex;align-items:center;gap:4px;justify-content:space-between"><span class="badge ${cls}">${esc(v)}</span>${cellToolsHTML(v)}</div></td>`;}
-        if(ef.type==='attachment') return `<td>${renderAttachmentCell(v)}</td>`;
+        if(ef.type==='attachment'){
+          const canAddMore=(isAdmin||ef.agentEditable)&&!_bulkMode;
+          const uploadLbl=canAddMore?`<label style="cursor:pointer;display:inline-flex;align-items:center;gap:3px;font-size:11px;color:var(--blue);white-space:nowrap" title="הוסף עוד תמונות/קבצים" onclick="event.stopPropagation()">
+            <i class="ti ti-upload" style="font-size:13px"></i>${v?'':'הוסף'}
+            <input type="file" accept="image/*,application/pdf" multiple style="display:none" onchange="handleExtraAttachmentUpload(event,'${r.id}','${ef.id}','${S.fileId}')">
+          </label>`:'';
+          return `<td><div style="display:flex;align-items:center;gap:6px">${renderAttachmentCell(v)}${uploadLbl}</div></td>`;
+        }
         if(ef.type==='link'&&v){
           const url=v.match(/^https?:\/\//)?v:('https://'+v);
           return `<td><a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;display:flex;align-items:center;gap:4px" onclick="event.stopPropagation()"><i class="ti ti-link" style="font-size:12px"></i> פתח</a></td>`;
@@ -4016,6 +4023,29 @@ async function handleAdminAttachmentUpload(event,recordId,fieldId,fileId){
   if(newUrls.length){
     const combined=[...existing,...newUrls];
     await saveAdminField(recordId,fieldId,JSON.stringify(combined),fileId);
+    render();
+    showAlert(failed?`${newUrls.length} הועלו, ${failed} נכשלו`:'הקבצים הועלו בהצלחה','success');
+  }else{
+    showAlert('שגיאה בהעלאת הקבצים','error');
+  }
+}
+async function handleExtraAttachmentUpload(event,recordId,fieldId,fileId){
+  let files=[...event.target.files]; if(!files.length) return;
+  const recs=_cachedRecords[fileId]||[];
+  const record=recs.find(r=>r.id===recordId);
+  const existing=parseAttachmentUrls(record?record.extra?.[fieldId]:null);
+  const room=MAX_ATTACHMENTS_PER_FIELD-existing.length;
+  if(room<=0){ showAlert(`כבר יש מקסימום ${MAX_ATTACHMENTS_PER_FIELD} קבצים בשדה זה`,'error'); return; }
+  if(files.length>room) files=files.slice(0,room);
+  showAlert(`מעלה ${files.length} קבצים...`,'success');
+  const newUrls=[]; let failed=0;
+  for(const file of files){
+    try{ const {url}=await uploadOneAttachment(fieldId,file); newUrls.push(url); }
+    catch(e){ failed++; }
+  }
+  if(newUrls.length){
+    const combined=[...existing,...newUrls];
+    await saveExtraField(recordId,fieldId,JSON.stringify(combined),fileId);
     render();
     showAlert(failed?`${newUrls.length} הועלו, ${failed} נכשלו`:'הקבצים הועלו בהצלחה','success');
   }else{
