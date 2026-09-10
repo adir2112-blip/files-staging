@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.84'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.85'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -556,7 +556,7 @@ async function initLogin(){
     if(mgr){
       // load all agents for admin management
       allAgents=await GET('app_users','?order=name.asc&select=id,name,pin,active,last_login,allowed_orgs');
-      enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,is_project_manager:!!mgr.is_project_manager,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{}});
+      enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,is_project_manager:!!mgr.is_project_manager,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{},dashboard_widgets:mgr.dashboard_widgets||[]});
       PATCH('app_managers',{last_login:new Date().toISOString()},`?email=eq.${encodeURIComponent(mgr.email)}`).catch(()=>{});
       return;
     }
@@ -636,7 +636,7 @@ async function loginManager(){
   if(error){showLoginErr('mgr-err','mgr-err-msg','מייל או סיסמה שגויים');btn.disabled=false;btn.innerHTML='<i class="ti ti-login"></i> כניסה';return;}
   const {data:mgr}=await sbClient.from('app_managers').select('*').eq('email',email).eq('active',true).single();
   if(!mgr){await sbClient.auth.signOut();showLoginErr('mgr-err','mgr-err-msg','אין הרשאת מנהל');btn.disabled=false;btn.innerHTML='<i class="ti ti-login"></i> כניסה';return;}
-  enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,is_project_manager:!!mgr.is_project_manager,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{}});
+  enterApp({name:mgr.name,role:'manager',is_super_admin:mgr.is_super_admin,is_project_manager:!!mgr.is_project_manager,email:mgr.email,allowed_orgs:mgr.allowed_orgs||[],allowed_files:mgr.allowed_files||[],tab_permissions:mgr.tab_permissions||{},dashboard_widgets:mgr.dashboard_widgets||[]});
   // עדכון תאריך כניסה אחרון — לא חוסם את הכניסה
   PATCH('app_managers',{last_login:new Date().toISOString()},`?email=eq.${encodeURIComponent(mgr.email)}`).catch(()=>{});
 }
@@ -2608,16 +2608,18 @@ async function loadDashDataForPeriod(){
       // שולפים את כל הרשומות (בלי סינון תאריך) — חריגה היא מצב "עכשיו" (תלוי בגיל הרשומה),
       // ולא בהכרח נופלת בטווח התאריכים של תקופת התצוגה. סינון לפי תקופה כאן היה מסתיר
       // חריגות אמיתיות ברשומות שנוצרו מחוץ לתקופה (למשל "היום") למרות שהן חורגות עכשיו.
-      const params=`?file_id=eq.${f.id}&select=id,created_at,extra,admin_data`;
+      const params=`?file_id=eq.${f.id}&select=id,created_at,extra,admin_data,closed_at,escalated_at`;
       const recs = await GET('records', params);
       const inPeriod = (from||to) ? recs.filter(r=>{const t=new Date(r.created_at).getTime();return (!from||t>=new Date(from).getTime())&&(!to||t<new Date(to).getTime());}) : recs;
       const total = inPeriod.length;
       const breached = recs.filter(r=>recordMatchesAlert(r,f)).length;
+      // "הועבר למנהל פרויקט ועדיין פתוח" — לא תלוי בתקופת התצוגה, זה מצב "עכשיו"
+      const escalatedOpen = recs.filter(r=>r.escalated_at&&!r.closed_at&&isRecordEscalated(r,f)).length;
       // store on data item
       if(!S._dashboardData) S._dashboardData=[];
       const existing = S._dashboardData.find(d=>d.file.id===f.id);
-      if(existing){ existing.total=total; existing.breached=breached; }
-      else S._dashboardData.push({file:f, total, breached});
+      if(existing){ existing.total=total; existing.breached=breached; existing.escalatedOpen=escalatedOpen; }
+      else S._dashboardData.push({file:f, total, breached, escalatedOpen});
     }catch(e){}
   }));
   // ensure all accessible files present
@@ -2629,6 +2631,31 @@ async function loadDashDataForPeriod(){
   if(S._dashboardData) S._dashboardData=S._dashboardData.filter(d=>canManagerAccessFile(d.file)&&canManagerAccessOrg(d.file.org_id));
 }
 
+// ווידג'טים אופציונליים שכל מנהל יכול להוסיף לדשבורד שלו בעצמו (בנוסף לכרטיסי הליבה הקבועים)
+const DASHBOARD_OPTIONAL_WIDGETS=[
+  {key:'escalated_open', label:'הועבר למנהל פרויקט (פתוח)', icon:'ti-crown', bg:'linear-gradient(135deg,#f0fdf4,#dcfce7)', border:'#86efac', text:'#15803d', textDark:'#14532d'}
+];
+function openDashboardSettings(){
+  const enabled=new Set(currentUser?.dashboard_widgets||[]);
+  showModal(`<div class="modal-title"><i class="ti ti-adjustments" style="color:var(--blue)"></i> התאמת דשבורד</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">בחר אילו כרטיסים נוספים יופיעו בדשבורד שלך — ההגדרה אישית ונשמרת לחשבון שלך בלבד.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${DASHBOARD_OPTIONAL_WIDGETS.map(w=>`<label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600">
+        <input type="checkbox" class="dash-widget-cb" value="${w.key}" ${enabled.has(w.key)?'checked':''} style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
+        <i class="ti ${w.icon}" style="color:${w.text}"></i> ${esc(w.label)}
+      </label>`).join('')}
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">ביטול</button><button class="btn btn-primary" onclick="saveDashboardSettings()"><i class="ti ti-check"></i> שמור</button></div>`);
+}
+async function saveDashboardSettings(){
+  const widgets=[...document.querySelectorAll('.dash-widget-cb:checked')].map(cb=>cb.value);
+  try{
+    await PATCH('app_managers',{dashboard_widgets:widgets},`?email=eq.${encodeURIComponent(currentUser.email)}`);
+    currentUser.dashboard_widgets=widgets;
+    closeModal(); render();
+    showAlert('הדשבורד עודכן','success');
+  }catch(e){ showAlert('שגיאה בשמירה: '+e.message,'error'); }
+}
 function renderAdminDashboard(){
   if(S._dashLoading) return `<div class="loading"><div class="spinner"></div><p>טוען נתונים...</p></div>`;
   const data = S._dashboardData||[];
@@ -2638,6 +2665,8 @@ function renderAdminDashboard(){
   const sorted = [...data].sort((a,b)=>b.breached-a.breached);
   const totalBreached = sorted.reduce((s,d)=>s+d.breached,0);
   const totalRecords = sorted.reduce((s,d)=>s+d.total,0);
+  const totalEscalatedOpen = sorted.reduce((s,d)=>s+(d.escalatedOpen||0),0);
+  const enabledWidgets=new Set(currentUser?.dashboard_widgets||[]);
 
   const rows = sorted.map(d=>{
     const o = DB.orgs.find(x=>x.id===d.file.org_id);
@@ -2676,8 +2705,9 @@ function renderAdminDashboard(){
           : '—'
         }
       </td>
+      ${enabledWidgets.has('escalated_open')?`<td style="text-align:center">${d.escalatedOpen>0?`<span style="background:#d1fae5;color:#047857;font-weight:800;border-radius:20px;padding:3px 12px;font-size:13px">${d.escalatedOpen}</span>`:`<span style="color:var(--text3)">—</span>`}</td>`:''}
       <td style="text-align:center" onclick="event.stopPropagation()">
-        <button class="btn btn-xs" style="background:var(--purple-light);border-color:#c4b5fd;color:var(--purple)" 
+        <button class="btn btn-xs" style="background:var(--purple-light);border-color:#c4b5fd;color:var(--purple)"
           onclick="openPieChart('${d.file.id}')" title="פילוח שדה ניהולי">
           <i class="ti ti-chart-pie"></i>
         </button>
@@ -2709,10 +2739,16 @@ function renderAdminDashboard(){
         <div style="font-size:12px;color:#15803d;font-weight:700;margin-bottom:4px"><i class="ti ti-folder"></i> קבצים פעילים</div>
         <div style="font-size:28px;font-weight:900;color:#14532d">${data.length}</div>
       </div>
+      ${enabledWidgets.has('escalated_open')?`<div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #6ee7b7;border-radius:var(--radius-sm);padding:16px">
+        <div style="font-size:12px;color:#047857;font-weight:700;margin-bottom:4px"><i class="ti ti-crown"></i> הועבר למנהל פרויקט (פתוח)</div>
+        <div style="font-size:28px;font-weight:900;color:#064e3b">${totalEscalatedOpen}</div>
+        <div style="font-size:11px;color:#047857;opacity:.7;margin-top:2px">ממתין לתגובה, לא נסגר</div>
+      </div>`:''}
     </div>
     <div class="flex-between" style="margin-bottom:12px">
       <span style="font-size:13px;color:var(--text2);font-weight:600">ריכוז חריגות לפי קובץ — <span style="color:var(--blue)">${DASH_PERIODS.find(p=>p.key===_dashPeriod)?.label||'הכל'}</span></span>
       <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="openDashboardSettings()" title="התאם דשבורד"><i class="ti ti-adjustments"></i> התאם דשבורד</button>
         <button class="btn btn-sm" onclick="loadDashboardTab()"><i class="ti ti-refresh"></i> רענן</button>
         <button class="btn btn-sm" style="background:#25d366;border-color:#25d366;color:#fff" onclick="checkAndSendWAAlerts(false)" title="שלח התראות וואטסאפ לאנשי קשר">
           <i class="ti ti-brand-whatsapp"></i> שלח התראות WA
@@ -2725,6 +2761,7 @@ function renderAdminDashboard(){
           <th style="text-align:center">חריגות SLA</th>
           <th style="text-align:center">סה"כ רשומות</th>
           <th>תנאי SLA</th>
+          ${enabledWidgets.has('escalated_open')?'<th style="text-align:center;color:#047857"><i class="ti ti-crown"></i> הועבר למנהל פרויקט</th>':''}
           <th style="text-align:center"><i class="ti ti-chart-pie" style="color:var(--purple)"></i></th>
           <th></th>
         </tr></thead>
