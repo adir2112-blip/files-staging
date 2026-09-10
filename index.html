@@ -464,7 +464,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.92'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.93'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4624,7 +4624,7 @@ async function openEditFile(id){
   _tmpIcon=f.icon||'ti-file';_tmpFields=JSON.parse(JSON.stringify(f.extra_fields||[]));_tmpAdminFields=JSON.parse(JSON.stringify(f.admin_fields||[]));
   if(!S._managers) await loadManagersTab();
   showModal(fileModalHTML(f,'edit',id),true);
-  setTimeout(()=>{loadEmailManagersIntoModal();loadWAManagersIntoModal();},50);
+  setTimeout(()=>{loadEmailManagersIntoModal(f);loadWAManagersIntoModal(f);},50);
 }
 
 // ── FILE PERMISSIONS ──
@@ -4694,6 +4694,16 @@ function canManagerAccessFile(file){
   const allowedByFile=file.allowed_managers||[];
   if(allowedByFile.length && !allowedByFile.includes(currentUser?.email||'')) return false;
   const allowedByManager=currentUser?.allowed_files||[];
+  if(allowedByManager.length && !allowedByManager.includes(file.id)) return false;
+  return true;
+}
+// כמו canManagerAccessFile, אבל עבור מנהל כלשהו (לא בהכרח currentUser) —
+// לשימוש ברשימות בחירה (וואטסאפ/מייל) שצריכות להציג רק מנהלים שמורשים לקובץ עצמו
+function managerCanAccessFile(mgr,file){
+  if(mgr.is_super_admin) return true;
+  const allowedByFile=file.allowed_managers||[];
+  if(allowedByFile.length && !allowedByFile.includes(mgr.email||'')) return false;
+  const allowedByManager=mgr.allowed_files||[];
   if(allowedByManager.length && !allowedByManager.includes(file.id)) return false;
   return true;
 }
@@ -5205,13 +5215,14 @@ function collectInactivityAlert(){
   };
 }
 
-async function loadWAManagersIntoModal(){
+async function loadWAManagersIntoModal(file){
   const list=document.getElementById('wa-managers-list');
   if(!list) return;
   let selected=[];
   try{ selected=JSON.parse(list.dataset.selected||'[]'); }catch(e){}
   let managers=[];
-  try{ managers=(await GET('app_managers','?select=email,name,phone,active&order=name.asc')).filter(m=>m.active&&m.phone); }catch(e){}
+  try{ managers=(await GET('app_managers','?select=email,name,phone,active,is_super_admin,allowed_files&order=name.asc')).filter(m=>m.active&&m.phone); }catch(e){}
+  if(file) managers=managers.filter(m=>managerCanAccessFile(m,file));
   const selectedEmails=selected.map(s=>s.email||s.phone);
   list.innerHTML=managers.length
     ? managers.map(m=>{
@@ -6040,13 +6051,14 @@ function startEmailAlertTimers(){
 
 let _emailManagers = [];
 
-async function loadEmailManagersIntoModal(){
+async function loadEmailManagersIntoModal(file){
   const list = document.getElementById('email-managers-list');
   if(!list) return;
   const selected = JSON.parse(list.dataset.selected||'[]');
   try{
-    _emailManagers = await GET('app_managers','?select=email,name,active&order=name.asc');
+    _emailManagers = await GET('app_managers','?select=email,name,active,is_super_admin,allowed_files&order=name.asc');
     _emailManagers = (_emailManagers||[]).filter(m=>m.active);
+    if(file) _emailManagers = _emailManagers.filter(m=>managerCanAccessFile(m,file));
   }catch(e){ _emailManagers=[]; }
   renderEmailManagerPicker(selected);
 }
