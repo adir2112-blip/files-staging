@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.89'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.90'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1520,8 +1520,9 @@ function renderRecordsPage(){
     ? (_cachedArchive[S.fileId]||[])
     : (_cachedRecords[S.fileId]||[]);
   const extraFields=f.extra_fields||[],adminFields=f.admin_fields||[];
-  // שדות ניהוליים שמוגדרים "גלוי רק למנהל פרויקט" — מוסתרים לגמרי (כותרת+תא) מכל מי שאינו מנהל פרויקט
-  const visibleAdminFields=adminFields.filter(af=>!af.projectManagerOnly||isProjectManager());
+  // שדות ניהוליים המוגדרים "גלוי רק למנהל פרויקט" — כולם רואים את התשובה (קריאה בלבד),
+  // אבל רק מנהל פרויקט יכול לערוך/למלא אותם (ראה הגדרת canEdit בתוך adminC למטה)
+  const visibleAdminFields=adminFields;
   // count pending archive (approved but not yet 30 days)
   const pendingArchiveCount=(_cachedRecords[S.fileId]||[]).filter(r=>r.approved_at&&!r.archived).length;
   const archiveCount=(_cachedArchive[S.fileId]||[]).length;
@@ -1633,11 +1634,14 @@ function renderRecordsPage(){
       // שדה תלוי (למשל "תת-שדה" שנחשף רק כשתשובת מנהל = ערך מסוים) — כל עוד התנאי
       // לא מתקיים, מציגים placeholder ריק במקום התא בפועל
       if(af.dependsOn&&!escalationMet(r,af)) return `<td class="admin-col" style="text-align:center;color:var(--text3);opacity:.5">—</td>`;
+      // מנהל פרויקט הוא היחיד שיכול לערוך/למלא שדה כזה — לכל אחד אחר (כולל מנהל רגיל) הוא
+      // מוצג כקריאה-בלבד, בדיוק כמו ששדה ניהולי רגיל מוצג לנציג
+      const canEditField=isAdmin&&(!af.projectManagerOnly||isProjectManager());
       let cellHtml=(()=>{
-      if(!isAdmin){
+      if(!canEditField){
         const agentChatBadge=af.chatEnabled?`<span onclick="event.stopPropagation();showFieldChatFromRecord(event,'${af.id}','${esc(af.label)}',_cachedRecords['${S.fileId}']?.find(x=>x.id==='${r.id}')||{id:'${r.id}',field_comments:{}})" style="cursor:pointer;color:var(--blue);margin-right:4px;flex-shrink:0" title="פתח שיחה עם מנהל"><i class="ti ti-message-circle" style="font-size:14px"></i>${((r.field_comments||{})[af.id]||[]).length>0?`<sup style="font-size:9px;font-weight:800">${((r.field_comments||{})[af.id]||[]).length}</sup>`:''}</span>`:'';
         // if agentEditable — show editable input for agent
-        if(af.agentEditable){
+        if(af.agentEditable&&!af.projectManagerOnly){
           if(af.type==='checkbox') return `<td class="admin-col" style="text-align:center"><div style="display:flex;align-items:center;justify-content:center;gap:4px">${agentChatBadge}<input type="checkbox" class="admin-checkbox" ${val?'checked':''} onchange="saveAdminField('${r.id}','${af.id}',this.checked,'${S.fileId}')"></div></td>`;
           if(af.type==='select'){const opts=(af.options||'').split(',').map(o=>`<option value="${esc(o.trim())}" ${val===o.trim()?'selected':''}>${esc(o.trim())}</option>`).join('');return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${agentChatBadge}<select class="admin-input" style="flex:1;min-width:0;border-color:#ea580c" title="${esc(val||'')}" onchange="saveAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')"><option value="">--</option>${opts}</select>${cellToolsHTML(val)}</div></td>`;}
           return `<td class="admin-col"><div style="display:flex;align-items:center;gap:2px">${agentChatBadge}<input class="admin-input" type="text" value="${esc(val||'')}" placeholder="הזן..." style="flex:1;border-color:#ea580c" oninput="debounceAdminField('${r.id}','${af.id}',this.value,'${S.fileId}')">${cellToolsHTML(val)}</div></td>`;
@@ -1759,7 +1763,7 @@ function renderRecordsPage(){
   </div>`:'';
 
   // BULK UPDATE ALL FILTERED — no selection needed
-  const bulkEligibleFields = [...extraFields,...visibleAdminFields].filter(field=>field.bulkEnabled!==false);
+  const bulkEligibleFields = [...extraFields,...visibleAdminFields].filter(field=>field.bulkEnabled!==false&&(!field.projectManagerOnly||isProjectManager()));
   const bulkAllBar = isAdmin && filtered.length>0 && bulkEligibleFields.length ? `
     <div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:1.5px solid #86efac;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px">
       <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:10px;display:flex;align-items:center;gap:6px">
