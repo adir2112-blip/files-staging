@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.86'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.87'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -4962,7 +4962,7 @@ function fieldRowHTML(ef,i,p){
   return `<div class="field-row" style="grid-template-columns:1fr;padding:12px" data-drag-p="${p}" data-drag-idx="${i}" ondragover="fieldDragOver(event)" ondragleave="fieldDragLeave(event)" ondrop="fieldDrop(event,'${p}',${i})">
     <div style="display:grid;grid-template-columns:auto 1fr 1fr auto auto auto auto auto;gap:8px">
       <div class="field-drag-handle" draggable="true" ondragstart="fieldDragStart(event,'${p}',${i})" ondragend="fieldDragEnd(event)" title="גרור לשינוי סדר"><i class="ti ti-grip-vertical" style="font-size:18px"></i></div>
-      <div><label class="form-label" style="font-size:10px">שם השדה</label><input class="form-input" data-fl="${p}_${i}" value="${esc(ef.label)}" placeholder="שם"></div>
+      <div><label class="form-label" style="font-size:10px">שם השדה</label><input class="form-input" data-fl="${p}_${i}" value="${esc(ef.label)}" placeholder="שם" onblur="saveFieldsFromDOM('${p}');refreshFields('${p}')"></div>
       <div><label class="form-label" style="font-size:10px">סוג</label>
         <select class="form-input" data-ft="${p}_${i}" onchange="onTypeChange('${p}',${i},this.value)"><option value="">בחר...</option>${typeOpts}</select>
         ${ef.type==='select'?fieldOptionChipsHTML(ef,i,p):''}
