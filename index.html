@@ -458,7 +458,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.83'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.84'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1877,6 +1877,19 @@ function isAdirAdmin(){
 }
 function isProjectManager(){
   return S.adminLoggedIn && (currentUser?.is_super_admin || !!currentUser?.is_project_manager);
+}
+// בודק אם רשומה "מועברת" כרגע למנהל פרויקט — כלומר יש שדה ניהולי המוגדר
+// projectManagerOnly+dependsOn, ותנאי התלות שלו מתקיים על נתוני הרשומה
+function isRecordEscalated(record,file){
+  const adminData=record.admin_data||{};
+  return (file?.admin_fields||[]).some(af=>{
+    if(!af.projectManagerOnly||!af.dependsOn) return false;
+    const parentField=(file.admin_fields||[]).find(x=>x.id===af.dependsOn);
+    const parentVal=adminData[af.dependsOn];
+    return parentField?.type==='checkbox'
+      ? String(!!parentVal)===af.dependsOnValue
+      : String(parentVal||'')===(af.dependsOnValue||'');
+  });
 }
 function canSeeAdminTab(key){
   if(currentUser?.is_super_admin) return true;
@@ -4162,8 +4175,12 @@ async function saveAdminField(recordId,fieldId,value,fileId){
   });
   // keep only last 30 entries per record
   if(record.change_log.length>30) record.change_log=record.change_log.slice(-30);
+  // מעקב "הועבר למנהל פרויקט" — לצורך מדידת זמן חריגה מרגע ההעברה
+  const nowEscalated=isRecordEscalated(record,f);
+  if(nowEscalated&&!record.escalated_at) record.escalated_at=treatedAt;
+  else if(!nowEscalated&&record.escalated_at) record.escalated_at=null;
   try{
-    await PATCH('records',{admin_data:record.admin_data,treated_at:treatedAt,change_log:record.change_log},`?id=eq.${recordId}`);
+    await PATCH('records',{admin_data:record.admin_data,treated_at:treatedAt,change_log:record.change_log,escalated_at:record.escalated_at},`?id=eq.${recordId}`);
     await loadAllCounts();
     const cell=document.getElementById('treated-at-'+recordId);
     if(cell) cell.innerHTML=`<div>${fmtDate(treatedAt)}</div><div style="color:var(--purple);font-weight:600;font-size:10px">${esc(currentUser?.name||_agentName||'')}</div>`;
@@ -4874,9 +4891,15 @@ function fieldDependsOnHTML(ef,i,p){
     valueSelect=`<select class="form-input" style="font-size:12px" data-fdv="${p}_${i}"><option value="">בחר ערך מפעיל...</option>${valueOpts}</select>`;
   }
   const pmOnlyHTML=p==='a'?`<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#15803d;margin-top:10px">
-      <input type="checkbox" data-fpm="${p}_${i}" ${ef.projectManagerOnly?'checked':''} style="width:15px;height:15px;accent-color:#15803d;cursor:pointer">
+      <input type="checkbox" data-fpm="${p}_${i}" ${ef.projectManagerOnly?'checked':''} onchange="document.getElementById('pm-days-wrap-${p}-${i}').style.display=this.checked?'flex':'none'" style="width:15px;height:15px;accent-color:#15803d;cursor:pointer">
       <i class="ti ti-crown" style="font-size:13px"></i> גלוי לעריכה רק למנהל פרויקט (מוסתר מנציגים ומנהלים רגילים)
-    </label>`:'';
+    </label>
+    <div id="pm-days-wrap-${p}-${i}" style="display:${ef.projectManagerOnly?'flex':'none'};align-items:center;gap:8px;margin-top:8px;padding-right:21px">
+      <i class="ti ti-clock-alert" style="font-size:13px;color:#15803d"></i>
+      <span style="font-size:12px;color:var(--text2)">שלח התראת וואטסאפ למנהל הפרויקט אם עברו</span>
+      <input type="number" min="0" step="0.5" data-fpmd="${p}_${i}" value="${ef.escalationAlertDays||''}" placeholder="—" style="width:60px;font-size:12px;padding:5px 8px;border:1px solid var(--border2);border-radius:6px">
+      <span style="font-size:12px;color:var(--text2)">ימי עסקים מרגע ההעברה אליו, בלי שסגר את הרשומה</span>
+    </div>`:'';
   return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border2)">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--purple)">
       <i class="ti ti-git-branch" style="font-size:13px"></i> שדה תלוי — מוצג רק בתנאי
@@ -4965,6 +4988,8 @@ function saveFieldsFromDOM(p){
     if(fdv) ef.dependsOnValue=fdv.value;
     const fpm=document.querySelector('[data-fpm="'+p+'_'+i+'"]');
     if(fpm) ef.projectManagerOnly=fpm.checked;
+    const fpmd=document.querySelector('[data-fpmd="'+p+'_'+i+'"]');
+    if(fpmd) ef.escalationAlertDays=fpmd.value?parseFloat(fpmd.value):null;
   });
 }
 function onTypeChange(p,i,val){
@@ -5070,7 +5095,8 @@ const a2=document.querySelector(`[data-fa="${p}_${i}"]`);
 const fdo=document.querySelector(`[data-fdo="${p}_${i}"]`);
 const fdv=document.querySelector(`[data-fdv="${p}_${i}"]`);
 const fpm=document.querySelector(`[data-fpm="${p}_${i}"]`);
-return{id:ef.id,label:l?l.value.trim():ef.label,type:t?t.value:ef.type,options:o?o.value.trim():ef.options,required:r?r.checked:!!ef.required,bulkEnabled:b?b.checked:(ef.bulkEnabled!==false),noteEnabled:ne?ne.checked:!!ef.noteEnabled,note:n?n.value.trim():(ef.note||''),chatEnabled:c2?c2.checked:!!ef.chatEnabled,agentEditable:a2?a2.checked:!!ef.agentEditable,dependsOn:fdo?fdo.value:(ef.dependsOn||''),dependsOnValue:fdv?fdv.value:(ef.dependsOnValue||''),projectManagerOnly:fpm?fpm.checked:!!ef.projectManagerOnly};}).filter(ef=>ef.label);}
+const fpmd=document.querySelector(`[data-fpmd="${p}_${i}"]`);
+return{id:ef.id,label:l?l.value.trim():ef.label,type:t?t.value:ef.type,options:o?o.value.trim():ef.options,required:r?r.checked:!!ef.required,bulkEnabled:b?b.checked:(ef.bulkEnabled!==false),noteEnabled:ne?ne.checked:!!ef.noteEnabled,note:n?n.value.trim():(ef.note||''),chatEnabled:c2?c2.checked:!!ef.chatEnabled,agentEditable:a2?a2.checked:!!ef.agentEditable,dependsOn:fdo?fdo.value:(ef.dependsOn||''),dependsOnValue:fdv?fdv.value:(ef.dependsOnValue||''),projectManagerOnly:fpm?fpm.checked:!!ef.projectManagerOnly,escalationAlertDays:fpmd?(fpmd.value?parseFloat(fpmd.value):null):(ef.escalationAlertDays??null)};}).filter(ef=>ef.label);}
 function collectPendingRules(){const r={};document.querySelectorAll('[data-pr]').forEach(el=>{if(el.value&&el.value!=='ignore')r[el.dataset.pr]=el.value;});return r;}
 function collectAlertEmails(){
   return [0,1,2,3].map(i=>document.getElementById(`email-alert-${i}`)?.value.trim()||'').filter(Boolean);
