@@ -454,7 +454,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.80'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.81'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -828,6 +828,10 @@ function totalPending(){return DB.files.filter(f=>canManagerAccessFile(f)&&f.act
 // ── RENDER ──
 function render(){
   const app=document.getElementById('app');
+  // רענון מלא (innerHTML) מאפס גלילה אופקית בטבלה הרחבה — שומרים ומשחזרים אותה
+  // כדי שפעולה כמו "סגור רשומה" לא תזרוק את המשתמש חזרה לתחילת השורה
+  const prevWrap=app.querySelector('.table-wrap');
+  const prevScrollLeft=prevWrap?prevWrap.scrollLeft:null;
   app.className = S.view==='records' ? 'container full-width' : 'container';
   // show/hide home button
   const homeBtn=document.getElementById('home-btn');
@@ -840,6 +844,10 @@ function render(){
   else if(S.view==='records') html+=renderRecordsPage();
   else if(S.view==='admin')   html+=renderAdmin();
   app.innerHTML=html;
+  if(prevScrollLeft!==null){
+    const newWrap=app.querySelector('.table-wrap');
+    if(newWrap) newWrap.scrollLeft=prevScrollLeft;
+  }
   if(S.view==='form') setTimeout(()=>{wireFieldDependencies();wireFormShortcuts();},30);
 }
 
