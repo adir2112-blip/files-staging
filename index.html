@@ -467,7 +467,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.98'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.99'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1555,6 +1555,9 @@ function renderRecordsPage(){
   const archiveCount=(_cachedArchive[S.fileId]||[]).length;
   const q=(S.searchQ||'').toLowerCase();
   let filtered=q?records.filter(r=>(r.first_name+' '+r.last_name+' '+r.phone+' '+r.id_num+' '+(r.agent_name||'')).toLowerCase().includes(q)):records;
+  // חיפוש חוצה-ארכיון: אם מחפשים בטבלה הפעילה, בודקים גם התאמות שכבר עברו לארכיון —
+  // כדי שלקוח לא "ייעלם" מהחיפוש רק כי הרשומה שלו הועברה לארכיון אחרי חודש
+  const archiveSearchMatches=(q&&!S.archiveMode)?(_cachedArchive[S.fileId]||[]).filter(r=>(r.first_name+' '+r.last_name+' '+r.phone+' '+r.id_num+' '+(r.agent_name||'')).toLowerCase().includes(q)):[];
   Object.entries(S.filters||{}).forEach(([afId,val])=>{
     if(!val) return;
     const af=adminFields.find(x=>x.id===afId);
@@ -1891,6 +1894,16 @@ function renderRecordsPage(){
       <input class="form-input" id="records-search" type="text" placeholder='חיפוש לפי שם / טלפון / ת"ז / נציג...' value="${esc(S.searchQ)}" oninput="debounceSearch(this.value)">
       <i class="ti ti-search"></i>
     </div>
+    ${archiveSearchMatches.length?`<div style="margin-bottom:14px;padding:10px 14px;background:var(--surface2);border:1.5px dashed var(--border2);border-radius:var(--radius-sm)">
+      <div style="font-size:12px;color:var(--text3);font-weight:700;margin-bottom:6px"><i class="ti ti-archive"></i> נמצאו גם ${archiveSearchMatches.length} תוצאות בארכיון:</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        ${archiveSearchMatches.map(r=>`<div onclick="openGlobalResultDetail('${r.id}','${f.id}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px">
+          <span style="font-weight:700">${esc(r.first_name)} ${esc(r.last_name)}</span>
+          <span dir="ltr" style="color:var(--text3)">${esc(r.phone||'')}</span>
+          <i class="ti ti-arrow-left" style="margin-right:auto;color:var(--text3)"></i>
+        </div>`).join('')}
+      </div>
+    </div>`:''}
     ${filterBar}
     ${S.showBulkAll?bulkAllBar:''}
     ${bulkBar}
@@ -2625,7 +2638,7 @@ function renderGlobalResults(){
     const f=DB.files.find(x=>x.id===r.file_id);
     const o=DB.orgs.find(x=>x.id===(f&&f.org_id));
     const bg=isArchived?'#f8f8f8':'';
-    return `<div onclick="openGlobalResult('${r.file_id}',${isArchived})"
+    return `<div onclick="openGlobalResultDetail('${r.id}','${r.file_id}')"
       style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;background:${bg};transition:background .12s"
       onmouseover="this.style.background=var('--blue-light','#eff6ff')" onmouseout="this.style.background='${bg}'">
       <div class="ali-avatar" style="flex-shrink:0;${isArchived?'opacity:.6':''}">${(r.first_name[0]||'?')+(r.last_name[0]||'')}</div>
@@ -2665,6 +2678,49 @@ async function openGlobalResult(fileId, isArchived=false){
   S.globalSearch=''; S.globalSearchResults=null;
   await adminViewFileRecords(fileId, isArchived);
 }
+// פופאפ עם השורה המלאה של תוצאת חיפוש גלובלי — כדי שלא יצטרכו לחפש שוב בתוך
+// כל רשימת הרשומות של הטופס (יכולה להכיל מאות שורות) רק כדי למצוא את מה שכבר נמצא
+async function openGlobalResultDetail(recordId,fileId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  let record;
+  try{ const rows=await GET('records',`?id=eq.${recordId}&select=*`); record=rows&&rows[0]; }
+  catch(e){}
+  if(!record){ showAlert('שגיאה בטעינת הרשומה','error'); return; }
+  const org=DB.orgs.find(o=>o.id===f.org_id);
+  const rowsHTML=[
+    ['שם מלא', `${record.first_name||''} ${record.last_name||''}`.trim()||'—'],
+    ['טלפון', record.phone||'—'],
+    ['ת"ז', record.id_num||'—'],
+    ['נציג', record.agent_name||'—'],
+    ['תאריך יצירה', fmtDate(record.created_at)],
+  ];
+  if(record.archived) rowsHTML.push(['סטטוס','בארכיון']);
+  (f.extra_fields||[]).forEach(ef=>{
+    if(ef.type==='attachment') return;
+    const v=(record.extra||{})[ef.id];
+    rowsHTML.push([ef.label, v!=null&&v!==''?String(v):'—']);
+  });
+  (f.admin_fields||[]).forEach(af=>{
+    if(af.type==='attachment') return;
+    if(af.projectManagerOnly&&!isProjectManager()) return;
+    const v=(record.admin_data||{})[af.id];
+    rowsHTML.push([af.label, v!=null&&v!==''?String(v):'—']);
+  });
+  showModal(`
+    <div class="modal-title"><i class="ti ${f.icon||'ti-file'}" style="color:var(--blue)"></i> ${esc(record.first_name)} ${esc(record.last_name)}</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">${esc(f.name)} · ${esc(org?.name||'')}</div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      ${rowsHTML.map(([label,val],i)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 12px;font-size:13px;${i%2?'background:var(--surface2)':''};border-bottom:1px solid var(--border)">
+        <span style="color:var(--text3);font-weight:600;flex-shrink:0">${esc(label)}</span>
+        <span style="font-weight:600;text-align:left">${esc(val)}</span>
+      </div>`).join('')}
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">סגור</button>
+      <button class="btn btn-primary" onclick="closeModal();openGlobalResult('${fileId}',${!!record.archived})"><i class="ti ti-list"></i> פתח בטופס המלא</button>
+    </div>
+  `,true);
+}
 function goFiles(orgId){if(orgId)S.orgId=orgId;S.view='files';S.fileId=null;_bulkMode=false;_selectedRows.clear();render();}
 function goForm(fileId){S.fileId=fileId;S.view='form';S.searchQ='';S.filters={};S.chatFilter='';S.phoneSearch='';S.phoneLookup=null;_bulkMode=false;_selectedRows.clear();S.showBulkAll=false;render();}
 async function goRecords(fileId, archiveMode=false){
@@ -2675,9 +2731,10 @@ async function goRecords(fileId, archiveMode=false){
   await getRecords(fileId, archiveMode);
   if(!archiveMode){
     await autoArchiveExpired(fileId);
-    // also load archive count for badge
-    GET('records',`?file_id=eq.${fileId}&archived=eq.true&select=id`).then(r=>{
-      if(!_cachedArchive[fileId]||!_cachedArchive[fileId].length) _cachedArchive[fileId]=r||[];
+    // גם טוענים ברקע את הארכיון המלא (לא רק id) — כדי שחיפוש בטבלה הפעילה
+    // יוכל למצוא ולהציג גם לקוחות שהרשומה שלהם כבר עברה לארכיון
+    GET('records',`?file_id=eq.${fileId}&archived=eq.true&order=archived_at.desc`).then(r=>{
+      _cachedArchive[fileId]=r||[];
       render();
     });
   }
