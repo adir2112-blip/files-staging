@@ -464,7 +464,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.93'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.94'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1570,7 +1570,7 @@ function renderRecordsPage(){
     else filtered=filtered.filter(r=>recordChatStatus(r)===S.chatFilter);
   }
   // שדות שהוגדרו כ"תת-שדה למנהל פרויקט" עם תלות — משמשים לסינון "הועבר אליי"
-  const escalationFields=adminFields.filter(af=>af.projectManagerOnly&&af.dependsOn);
+  const escalationFields=adminFields.filter(af=>af.projectManagerOnly&&af.dependsOn&&(!af.assignedManagerEmail||af.assignedManagerEmail===currentUser?.email));
   const escalationMet=(r,af)=>{
     const parentField=adminFields.find(x=>x.id===af.dependsOn);
     const parentVal=(r.admin_data||{})[af.dependsOn];
@@ -1611,7 +1611,11 @@ function renderRecordsPage(){
   const coreH=(cf.first_name!==false?sortable('first_name','שם פרטי'):'')+(cf.last_name!==false?sortable('last_name','שם משפחה'):'')+(cf.phone!==false?sortable('phone','טלפון'):'')+(cf.id_num!==false?sortable('id_num','ת"ז'):'');
   const narrowColStyle=(t)=>t==='attachment'?'max-width:90px;white-space:normal;line-height:1.3':t==='select'?'min-width:220px':'';
   const extraH=extraFields.map(ef=>sortable('extra_'+ef.id,esc(ef.label),'',narrowColStyle(ef.type))).join('');
-  const adminH=visibleAdminFields.map(af=>sortable('admin_'+af.id,(af.projectManagerOnly?'<i class="ti ti-crown" style="font-size:10px;color:#15803d"></i> ':'<i class="ti ti-shield-check" style="font-size:10px"></i> ')+esc(af.label),af.projectManagerOnly?'admin-col escalation-col':'admin-col',narrowColStyle(af.type))).join('');
+  const adminH=visibleAdminFields.map(af=>{
+    const icon=af.projectManagerOnly?'<i class="ti ti-crown" style="font-size:10px;color:#15803d"></i> ':'<i class="ti ti-shield-check" style="font-size:10px"></i> ';
+    const gear=isAdirAdmin()?`<i class="ti ti-settings" style="font-size:11px;margin-right:5px;opacity:.55;cursor:pointer" onclick="event.stopPropagation();openQuickFieldSettings('${S.fileId}','${af.id}')" title="הגדרה מהירה — שדה תלוי / מנהל פרויקט"></i>`:'';
+    return sortable('admin_'+af.id,icon+esc(af.label)+gear,af.projectManagerOnly?'admin-col escalation-col':'admin-col',narrowColStyle(af.type));
+  }).join('');
   const treatedH=adminFields.length?sortable('treated_at','<i class="ti ti-clock-check" style="font-size:10px"></i> תאריך טיפול','admin-col'):'';
   const noteH=isAdmin?'<th class="admin-col" style="white-space:nowrap"><i class="ti ti-message-2" style="font-size:10px"></i> הערת מנהל</th>':'';
   const closeH=(isAdmin&&f.allow_close_record)?'<th style="white-space:nowrap"><i class="ti ti-circle-check" style="font-size:10px"></i> סטטוס טיפול</th>':'';
@@ -1658,7 +1662,7 @@ function renderRecordsPage(){
       if(af.dependsOn&&!escalationMet(r,af)) return `<td class="admin-col" style="text-align:center;color:var(--text3);opacity:.5">—</td>`;
       // מנהל פרויקט הוא היחיד שיכול לערוך/למלא שדה כזה — לכל אחד אחר (כולל מנהל רגיל) הוא
       // מוצג כקריאה-בלבד, בדיוק כמו ששדה ניהולי רגיל מוצג לנציג
-      const canEditField=isAdmin&&(!af.projectManagerOnly||isProjectManager());
+      const canEditField=isAdmin&&(!af.projectManagerOnly||(af.assignedManagerEmail?currentUser?.email===af.assignedManagerEmail:isProjectManager()));
       let cellHtml=(()=>{
       if(!canEditField){
         const agentChatBadge=af.chatEnabled?`<span onclick="event.stopPropagation();showFieldChatFromRecord(event,'${af.id}','${esc(af.label)}',_cachedRecords['${S.fileId}']?.find(x=>x.id==='${r.id}')||{id:'${r.id}',field_comments:{}})" style="cursor:pointer;color:var(--blue);margin-right:4px;flex-shrink:0" title="פתח שיחה עם מנהל"><i class="ti ti-message-circle" style="font-size:14px"></i>${((r.field_comments||{})[af.id]||[]).length>0?`<sup style="font-size:9px;font-weight:800">${((r.field_comments||{})[af.id]||[]).length}</sup>`:''}</span>`:'';
@@ -1916,6 +1920,79 @@ function isRecordEscalated(record,file){
       ? String(!!parentVal)===af.dependsOnValue
       : String(parentVal||'')===(af.dependsOnValue||'');
   });
+}
+// ── הגדרה מהירה לשדה ניהולי (שדה תלוי + מנהל פרויקט), ישירות מכותרת העמודה בטבלת הרשומות ──
+// קיצור דרך לעורך השדות המלא — אותה תכונה בדיוק, בלי לפתוח את כל עריכת הקובץ
+async function openQuickFieldSettings(fileId,fieldId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  const af=(f.admin_fields||[]).find(x=>x.id===fieldId); if(!af) return;
+  let pmList=[];
+  try{ pmList=(await GET('app_managers','?select=email,name,is_project_manager,active&order=name.asc')).filter(m=>m.active&&m.is_project_manager); }catch(e){}
+  const candidates=(f.admin_fields||[]).filter(x=>x.id!==fieldId&&x.label&&(x.type==='select'||x.type==='checkbox'));
+  const dependsOnOpts=candidates.map(x=>`<option value="${x.id}" ${af.dependsOn===x.id?'selected':''}>${esc(x.label)}</option>`).join('');
+  showModal(`
+    <div class="modal-title"><i class="ti ti-settings" style="color:var(--purple)"></i> הגדרה מהירה — ${esc(af.label)}</div>
+    <div class="form-row">
+      <label class="form-label">תלוי בשדה</label>
+      <select class="form-input" id="qfs-dependson" onchange="onQuickDependsOnChange('${fileId}','${fieldId}',this.value)">
+        <option value="">— תמיד מוצג —</option>
+        ${dependsOnOpts}
+      </select>
+      ${!candidates.length?`<div style="font-size:11px;color:var(--text3);margin-top:4px">אין עדיין שדה אחר מסוג תפריט/תיבת סימון עם שם — צריך להוסיף אחד בעורך השדות המלא.</div>`:''}
+    </div>
+    <div id="qfs-value-wrap">${quickDependsOnValueHTML(f,af)}</div>
+    <div class="form-row">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;color:#15803d">
+        <input type="checkbox" id="qfs-pm" ${af.projectManagerOnly?'checked':''} onchange="document.getElementById('qfs-pm-wrap').style.display=this.checked?'block':'none'" style="width:16px;height:16px;accent-color:#15803d;cursor:pointer">
+        <i class="ti ti-crown"></i> גלוי לעריכה רק למנהל פרויקט
+      </label>
+    </div>
+    <div id="qfs-pm-wrap" style="display:${af.projectManagerOnly?'block':'none'};margin-top:10px;padding-top:10px;border-top:1px dashed var(--border2)">
+      <div class="form-row">
+        <label class="form-label">מנהל פרויקט אחראי <span style="color:var(--text3);font-weight:400">(השדה יהיה נגיש רק אליו; ריק = לכל מנהלי הפרויקט)</span></label>
+        <select class="form-input" id="qfs-assigned">
+          <option value="">— כל מנהלי הפרויקט —</option>
+          ${pmList.map(m=>`<option value="${esc(m.email)}" ${af.assignedManagerEmail===m.email?'selected':''}>${esc(m.name||m.email)}</option>`).join('')}
+        </select>
+        ${!pmList.length?`<div style="font-size:11px;color:var(--text3);margin-top:4px">אין עדיין מנהלים מסומנים כ"מנהל פרויקט" — אפשר להגדיר בניהול > מנהלים.</div>`:''}
+      </div>
+      <div class="form-row">
+        <label class="form-label">ימי עסקים עד חריגה <span style="color:var(--text3);font-weight:400">(התראת וואטסאפ למנהל הפרויקט)</span></label>
+        <input type="number" min="0" step="0.5" class="form-input" id="qfs-days" value="${af.escalationAlertDays||''}" placeholder="—">
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">ביטול</button><button class="btn btn-primary" onclick="saveQuickFieldSettings('${fileId}','${fieldId}')"><i class="ti ti-check"></i> שמור</button></div>
+  `);
+}
+function quickDependsOnValueHTML(f,af){
+  const parent=(f.admin_fields||[]).find(x=>x.id===af.dependsOn);
+  if(!parent) return '';
+  const opts=parent.type==='checkbox'
+    ? `<option value="true" ${af.dependsOnValue==='true'?'selected':''}>מסומן ✓</option>`
+    : (parent.options||'').split(',').map(o=>o.trim()).filter(Boolean).map(o=>`<option value="${esc(o)}" ${af.dependsOnValue===o?'selected':''}>${esc(o)}</option>`).join('');
+  return `<div class="form-row"><label class="form-label">ערך מפעיל</label><select class="form-input" id="qfs-value"><option value="">בחר ערך...</option>${opts}</select></div>`;
+}
+function onQuickDependsOnChange(fileId,fieldId,parentId){
+  const f=DB.files.find(x=>x.id===fileId); const af=(f?.admin_fields||[]).find(x=>x.id===fieldId);
+  if(!af) return;
+  const wrap=document.getElementById('qfs-value-wrap');
+  if(wrap) wrap.innerHTML=quickDependsOnValueHTML(f,{...af,dependsOn:parentId,dependsOnValue:''});
+}
+async function saveQuickFieldSettings(fileId,fieldId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  const af=(f.admin_fields||[]).find(x=>x.id===fieldId); if(!af) return;
+  af.dependsOn=document.getElementById('qfs-dependson').value;
+  af.dependsOnValue=document.getElementById('qfs-value')?.value||'';
+  af.projectManagerOnly=document.getElementById('qfs-pm').checked;
+  af.assignedManagerEmail=document.getElementById('qfs-assigned')?.value||'';
+  const daysVal=document.getElementById('qfs-days')?.value;
+  af.escalationAlertDays=daysVal?parseFloat(daysVal):null;
+  if(!af.projectManagerOnly){ af.assignedManagerEmail=''; af.escalationAlertDays=null; }
+  try{
+    await PATCH('files',{admin_fields:f.admin_fields},`?id=eq.${fileId}`);
+    closeModal(); await loadAll(); render();
+    showAlert('ההגדרות נשמרו','success');
+  }catch(e){ showAlert('שגיאה בשמירה: '+e.message,'error'); }
 }
 function canSeeAdminTab(key){
   if(currentUser?.is_super_admin) return true;
@@ -5201,7 +5278,7 @@ const fdo=document.querySelector(`[data-fdo="${p}_${i}"]`);
 const fdv=document.querySelector(`[data-fdv="${p}_${i}"]`);
 const fpm=document.querySelector(`[data-fpm="${p}_${i}"]`);
 const fpmd=document.querySelector(`[data-fpmd="${p}_${i}"]`);
-return{id:ef.id,label:l?l.value.trim():ef.label,type:t?t.value:ef.type,options:o?o.value.trim():ef.options,required:r?r.checked:!!ef.required,bulkEnabled:b?b.checked:(ef.bulkEnabled!==false),noteEnabled:ne?ne.checked:!!ef.noteEnabled,note:n?n.value.trim():(ef.note||''),chatEnabled:c2?c2.checked:!!ef.chatEnabled,agentEditable:a2?a2.checked:!!ef.agentEditable,dependsOn:fdo?fdo.value:(ef.dependsOn||''),dependsOnValue:fdv?fdv.value:(ef.dependsOnValue||''),projectManagerOnly:fpm?fpm.checked:!!ef.projectManagerOnly,escalationAlertDays:fpmd?(fpmd.value?parseFloat(fpmd.value):null):(ef.escalationAlertDays??null)};}).filter(ef=>ef.label);}
+return{id:ef.id,label:l?l.value.trim():ef.label,type:t?t.value:ef.type,options:o?o.value.trim():ef.options,required:r?r.checked:!!ef.required,bulkEnabled:b?b.checked:(ef.bulkEnabled!==false),noteEnabled:ne?ne.checked:!!ef.noteEnabled,note:n?n.value.trim():(ef.note||''),chatEnabled:c2?c2.checked:!!ef.chatEnabled,agentEditable:a2?a2.checked:!!ef.agentEditable,dependsOn:fdo?fdo.value:(ef.dependsOn||''),dependsOnValue:fdv?fdv.value:(ef.dependsOnValue||''),projectManagerOnly:fpm?fpm.checked:!!ef.projectManagerOnly,escalationAlertDays:fpmd?(fpmd.value?parseFloat(fpmd.value):null):(ef.escalationAlertDays??null),assignedManagerEmail:ef.assignedManagerEmail||''};}).filter(ef=>ef.label);}
 function collectPendingRules(){const r={};document.querySelectorAll('[data-pr]').forEach(el=>{if(el.value&&el.value!=='ignore')r[el.dataset.pr]=el.value;});return r;}
 function collectAlertEmails(){
   return [0,1,2,3].map(i=>document.getElementById(`email-alert-${i}`)?.value.trim()||'').filter(Boolean);
