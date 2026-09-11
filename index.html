@@ -467,7 +467,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.97'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.98'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -991,7 +991,8 @@ function renderOrgs(){
       ${al>0?`<span style="font-size:13px;font-weight:900;color:#fff;display:flex;align-items:center;gap:4px"><i class="ti ti-alert-triangle" style="color:#fbbf24;font-size:13px"></i> ${al} בחריגה</span>`:''}
       ${fp>0?`<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.8)">${fp} ממתינים לטיפול</span>`:''}
     </div>`:'';
-    return `<div class="org-card" onclick="goFiles('${o.id}')" style="background:${st.bg}">
+    return `<div class="org-card" onclick="goFiles('${o.id}')" style="background:${st.bg};position:relative">
+      ${currentUser?.is_super_admin?`<button class="btn btn-xs" style="position:absolute;top:10px;left:10px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff" onclick="event.stopPropagation();openOrgPermissions('${o.id}')" title="הרשאות מנהלים לארגון זה"><i class="ti ti-user-check"></i></button>`:''}
       <div class="org-card-body">
         ${statsBar}
         <div class="org-card-logo">${st.logo}</div>
@@ -1874,6 +1875,7 @@ function renderRecordsPage(){
       <div class="card-title" style="margin-bottom:0;border:none;padding:0"><i class="ti ${f.icon||'ti-file'}"></i>${esc(f.name)} — ${S.archiveMode?'ארכיון':'רשומות פעילות'}</div>
       <div class="flex-gap">
         ${isAdmin?`<button class="btn btn-sm btn-primary" onclick="openEditFile('${f.id}')"><i class="ti ti-settings"></i> הגדרות</button>`:''}
+        ${currentUser?.is_super_admin?`<button class="btn btn-sm" style="background:var(--amber-light);border-color:#fcd34d;color:#92400e" onclick="openFilePermissions('${f.id}')" title="הרשאות גישה למנהלים"><i class="ti ti-user-check"></i> הרשאות</button>`:''}
         ${isAdmin?`<button class="btn btn-sm ${_bulkMode?'btn-primary':''}" onclick="toggleBulkMode()" title="עריכה מרובה">
           <i class="ti ti-${_bulkMode?'x':'checkbox'}"></i> ${_bulkMode?'בטל בחירה':'בחירה מרובה'}
         </button>`:''}
@@ -4749,10 +4751,15 @@ async function openEditFile(id){
 // ── FILE PERMISSIONS ──
 async function openFilePermissions(fileId){
   const f=DB.files.find(x=>x.id===fileId); if(!f) return;
-  // load all managers
+  const org=DB.orgs.find(o=>o.id===f.org_id);
+  const orgAllowed=org?.allowed_managers||[];
+  // load all managers — אם לארגון של הקובץ יש הגבלת מנהלים משלו, מציגים רק אותם כאן
+  // (אין טעם לתת גישה לקובץ למנהל שאסור לו לראות את הארגון בכלל)
   let managers=[];
   try{ managers=await GET('app_managers','?select=email,name,active&order=name.asc'); }catch(e){}
+  managers=managers.filter(m=>!orgAllowed.length||orgAllowed.includes(m.email));
   const allowed=f.allowed_managers||[];
+  const orgNote=orgAllowed.length?`<div style="font-size:12px;color:#92400e;margin-bottom:10px;padding:9px 12px;background:var(--amber-light);border-radius:8px;border:1px solid #fcd34d"><i class="ti ti-info-circle"></i> הארגון "${esc(org?.name||'')}" מוגבל ל-${orgAllowed.length} מנהלים — רק הם מוצגים כאן</div>`:'';
 
   const rows=managers.filter(m=>m.active).map(m=>`
     <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid ${allowed.includes(m.email)?'var(--blue)':'var(--border)'};border-radius:10px;cursor:pointer;background:${allowed.includes(m.email)?'var(--blue-light)':'var(--surface2)'};transition:all .15s;margin-bottom:6px">
@@ -4769,6 +4776,7 @@ async function openFilePermissions(fileId){
       <i class="ti ti-info-circle" style="color:#92400e"></i>
       אם לא נבחר אף מנהל — <strong>כולם</strong> יכולים לגשת לקובץ זה
     </div>
+    ${orgNote}
     <div id="perm-list" data-file-id="${fileId}">${rows||'<div class="empty"><i class="ti ti-users"></i><p>אין מנהלים פעילים</p></div>'}</div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">ביטול</button>
@@ -4794,11 +4802,54 @@ async function saveFilePermissions(fileId){
   }catch(e){ showAlert('שגיאה בשמירה','error'); }
 }
 
+// ── הרשאות מנהלים ברמת ארגון — מגבילה גם אילו מנהלים ניתן לבחור בהרשאות קובץ בתוך הארגון הזה ──
+async function openOrgPermissions(orgId){
+  const o=DB.orgs.find(x=>x.id===orgId); if(!o) return;
+  let managers=[];
+  try{ managers=await GET('app_managers','?select=email,name,active&order=name.asc'); }catch(e){}
+  const allowed=o.allowed_managers||[];
+
+  const rows=managers.filter(m=>m.active).map(m=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid ${allowed.includes(m.email)?'var(--blue)':'var(--border)'};border-radius:10px;cursor:pointer;background:${allowed.includes(m.email)?'var(--blue-light)':'var(--surface2)'};transition:all .15s;margin-bottom:6px">
+      <input type="checkbox" value="${esc(m.email)}" ${allowed.includes(m.email)?'checked':''} onchange="togglePermission(this)" style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer;flex-shrink:0">
+      <div>
+        <div style="font-weight:700;font-size:14px">${esc(m.name||m.email)}</div>
+        <div style="font-size:11px;color:var(--text3)" dir="ltr">${esc(m.email)}</div>
+      </div>
+    </label>`).join('');
+
+  showModal(`
+    <div class="modal-title"><i class="ti ti-user-check" style="color:var(--amber)"></i> הרשאות מנהלים — ${esc(o.name)}</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px;padding:10px 12px;background:var(--amber-light);border-radius:8px;border:1px solid #fcd34d">
+      <i class="ti ti-info-circle" style="color:#92400e"></i>
+      אם לא נבחר אף מנהל — <strong>כולם</strong> יכולים לגשת לארגון זה. מנהל שלא נבחר כאן גם לא יוצע בהרשאות של קבצים בתוך הארגון הזה.
+    </div>
+    <div id="org-perm-list" data-org-id="${orgId}">${rows||'<div class="empty"><i class="ti ti-users"></i><p>אין מנהלים פעילים</p></div>'}</div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">ביטול</button>
+      <button class="btn btn-black" onclick="saveOrgPermissions('${orgId}')"><i class="ti ti-check"></i> שמור הרשאות</button>
+    </div>`);
+}
+async function saveOrgPermissions(orgId){
+  const checked=[...document.querySelectorAll('#org-perm-list input[type=checkbox]:checked')].map(el=>el.value);
+  try{
+    await PATCH('organizations',{allowed_managers:checked},`?id=eq.${orgId}`);
+    const o=DB.orgs.find(x=>x.id===orgId);
+    if(o) o.allowed_managers=checked;
+    closeModal();
+    render();
+    showAlert(checked.length?`✓ גישה לארגון הוגבלה ל-${checked.length} מנהלים`:'✓ כל המנהלים יכולים לגשת','success');
+  }catch(e){ showAlert('שגיאה בשמירה','error'); }
+}
+
 // Filter orgs by manager permissions
 function canManagerAccessOrg(orgId){
   if(currentUser?.is_super_admin) return true;
+  const org=DB.orgs.find(o=>o.id===orgId);
+  const allowedByOrg=org?.allowed_managers||[];
+  if(allowedByOrg.length && !allowedByOrg.includes(currentUser?.email||'')) return false;
   if(currentUser?.role==='manager'){
-    // הרשאת מנהלים כיום ברמת קובץ בלבד — ארגון "נגיש" אם יש בו לפחות קובץ אחד שהמנהל רשאי בו
+    // הרשאת מנהלים ברמת קובץ — ארגון "נגיש" אם יש בו לפחות קובץ אחד שהמנהל רשאי בו
     return DB.files.some(f=>f.org_id===orgId && canManagerAccessFile(f));
   }
   // נציגים — עדיין ברמת ארגון (allowed_orgs)
@@ -4810,6 +4861,9 @@ function canManagerAccessOrg(orgId){
 // Filter files by manager permissions
 function canManagerAccessFile(file){
   if(currentUser?.is_super_admin) return true; // אדיר רואה הכל
+  const org=DB.orgs.find(o=>o.id===file.org_id);
+  const allowedByOrg=org?.allowed_managers||[];
+  if(allowedByOrg.length && !allowedByOrg.includes(currentUser?.email||'')) return false;
   const allowedByFile=file.allowed_managers||[];
   if(allowedByFile.length && !allowedByFile.includes(currentUser?.email||'')) return false;
   const allowedByManager=currentUser?.allowed_files||[];
@@ -4820,6 +4874,9 @@ function canManagerAccessFile(file){
 // לשימוש ברשימות בחירה (וואטסאפ/מייל) שצריכות להציג רק מנהלים שמורשים לקובץ עצמו
 function managerCanAccessFile(mgr,file){
   if(mgr.is_super_admin) return true;
+  const org=DB.orgs.find(o=>o.id===file.org_id);
+  const allowedByOrg=org?.allowed_managers||[];
+  if(allowedByOrg.length && !allowedByOrg.includes(mgr.email||'')) return false;
   const allowedByFile=file.allowed_managers||[];
   if(allowedByFile.length && !allowedByFile.includes(mgr.email||'')) return false;
   const allowedByManager=mgr.allowed_files||[];
