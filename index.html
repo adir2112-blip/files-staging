@@ -467,7 +467,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.96'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.97'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1748,11 +1748,13 @@ function renderRecordsPage(){
     return `<tr style="${trStyle}" onclick="${_bulkMode?`event.stopPropagation();toggleRowSelect('${r.id}')`:''}">${bulkCb}<td style="font-size:12px;white-space:nowrap;color:var(--text3)">${fmtDate(r.created_at)}</td>${coreC}${extraC}${agentC}${adminC}${treatedC}${noteC}${closeC}${histC}${delC}</tr>`;
   }).join('');
 
-  // ALL fields available for filtering (extra + admin)
+  // שדות זמינים לסינון (extra + admin) — רק אלה שהאדמין הפעיל במפורש בהגדרות סינון לטופס.
+  // ברירת מחדל (אין enabled_filter_fields עדיין) = בלי סינוני שדה בודד, רק סטטוס טיפול/מנהל פרויקט
+  const enabledFilterIds=new Set(f.enabled_filter_fields||[]);
   const allFilterableFields = [
     ...extraFields.map(ef=>({...ef,_isAdmin:false})),
     ...visibleAdminFields.map(af=>({...af,_isAdmin:true}))
-  ];
+  ].filter(field=>enabledFilterIds.has(field.id));
 
   const hasChatFields=[...extraFields,...adminFields].some(fld=>fld.chatEnabled);
   const hasCloseFeature=!!f.allow_close_record;
@@ -1777,10 +1779,12 @@ function renderRecordsPage(){
       <option value="pending" ${S.pmFilter==='pending'?'selected':''}>הועבר אליי</option>
     </select>
   </div>`:'';
-  const filterBar=(allFilterableFields.length||hasChatFields||hasCloseFeature||showPmFilter)?`<div class="filter-bar">
+  const filterSettingsBtn=isAdmin?`<button class="btn btn-xs" style="border-color:var(--border2)" onclick="openFilterSettingsModal('${f.id}')" title="בחר אילו סינוני שדה יופיעו בטופס הזה"><i class="ti ti-adjustments-horizontal"></i> הגדרות סינון לטופס</button>`:'';
+  const filterBar=(allFilterableFields.length||hasChatFields||hasCloseFeature||showPmFilter||isAdmin)?`<div class="filter-bar">
     <span class="filter-label"><i class="ti ti-filter"></i> סינון:</span>
     ${chatFilterHTML}
     ${pmFilterHTML}
+    ${filterSettingsBtn}
     ${allFilterableFields.map(field=>{
       const fid=field.id;
       const cur=esc(S.filters[fid]||'');
@@ -1997,6 +2001,38 @@ async function saveQuickFieldSettings(fileId,fieldId){
     await PATCH('files',{admin_fields:f.admin_fields},`?id=eq.${fileId}`);
     closeModal(); await loadAll(); render();
     showAlert('ההגדרות נשמרו','success');
+  }catch(e){ showAlert('שגיאה בשמירה: '+e.message,'error'); }
+}
+// ── הגדרות סינון לטופס — אילו סינוני שדה בודד מוצגים בטבלת הרשומות ──
+// ברירת מחדל: אין אף שדה מופעל (רק סטטוס טיפול/מנהל פרויקט, שמנוהלים בנפרד)
+function openFilterSettingsModal(fileId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  const enabled=new Set(f.enabled_filter_fields||[]);
+  const allFields=[
+    ...(f.extra_fields||[]).map(ef=>({...ef,_isAdmin:false})),
+    ...(f.admin_fields||[]).map(af=>({...af,_isAdmin:true}))
+  ].filter(fld=>fld.label);
+  showModal(`
+    <div class="modal-title"><i class="ti ti-adjustments-horizontal" style="color:var(--blue)"></i> הגדרות סינון לטופס</div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">בחר אילו שדות יקבלו תיבת סינון משלהם מעל טבלת הרשומות. "סטטוס טיפול" ו"מנהל פרויקט" תמיד מוצגים בנפרד ולא מושפעים מכאן.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto">
+      ${allFields.length?allFields.map(fld=>`<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;font-weight:600">
+        <input type="checkbox" class="filtset-cb" value="${fld.id}" ${enabled.has(fld.id)?'checked':''} style="width:16px;height:16px;accent-color:var(--blue);cursor:pointer">
+        ${fld._isAdmin?'<i class="ti ti-shield-check" style="font-size:12px;color:var(--purple)"></i>':''}
+        ${esc(fld.label)}
+      </label>`).join(''):'<div class="empty" style="padding:10px"><p>אין שדות בטופס הזה</p></div>'}
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">ביטול</button><button class="btn btn-primary" onclick="saveFilterSettings('${fileId}')"><i class="ti ti-check"></i> שמור</button></div>
+  `);
+}
+async function saveFilterSettings(fileId){
+  const f=DB.files.find(x=>x.id===fileId); if(!f) return;
+  const enabledFilterFields=[...document.querySelectorAll('.filtset-cb:checked')].map(cb=>cb.value);
+  try{
+    await PATCH('files',{enabled_filter_fields:enabledFilterFields},`?id=eq.${fileId}`);
+    f.enabled_filter_fields=enabledFilterFields;
+    closeModal(); render();
+    showAlert('הגדרות הסינון נשמרו','success');
   }catch(e){ showAlert('שגיאה בשמירה: '+e.message,'error'); }
 }
 function canSeeAdminTab(key){
