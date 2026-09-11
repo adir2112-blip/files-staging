@@ -161,6 +161,8 @@ select.form-input{cursor:pointer}
 .entry-hero-btn:hover{background:rgba(255,255,255,.18);transform:translateY(-1px)}
 .entry-hero-btn.green{background:rgba(34,197,94,.18);border-color:rgba(34,197,94,.3);color:#86efac}
 .entry-hero-btn.green:hover{background:rgba(34,197,94,.28)}
+.entry-hero-btn.highlight{background:#fff;color:#1e293b;border-color:#fff;font-weight:800;box-shadow:0 2px 12px rgba(255,255,255,.3)}
+.entry-hero-btn.highlight:hover{background:#f1f5f9;transform:translateY(-1px)}
 
 .entry-body{padding:26px 30px 28px}
 
@@ -464,7 +466,7 @@ const SB_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 const SB_REST = SB_URL+'/rest/v1';
 
 // ── VERSION CHECK ──
-const APP_VERSION = '1.0.94'; // עדכן מספר זה בכל שינוי
+const APP_VERSION = '1.0.95'; // עדכן מספר זה בכל שינוי
 const VERSION_URL = 'https://adir2112-blip.github.io/files/version.txt';
 
 async function checkForUpdates(){
@@ -1140,7 +1142,7 @@ function renderForm(){
         </div>
         <div class="entry-hero-actions">
           <button class="entry-hero-btn" onclick="goRecords('${f.id}')"><i class="ti ti-list"></i> רשומות</button>
-          ${S.adminLoggedIn&&canManagerAccessFile(f)?`<button class="entry-hero-btn" onclick="openEditFile('${f.id}')"><i class="ti ti-settings"></i> ערוך טופס</button>`:''}
+          ${S.adminLoggedIn&&canManagerAccessFile(f)?`<button class="entry-hero-btn highlight" onclick="openEditFile('${f.id}')"><i class="ti ti-settings"></i> הגדרות</button>`:''}
           <button class="entry-hero-btn green" onclick="exportFile('${f.id}')"><i class="ti ti-download"></i> Excel</button>
         </div>
       </div>
